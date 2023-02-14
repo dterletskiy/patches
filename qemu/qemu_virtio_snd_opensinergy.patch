@@ -1,0 +1,616 @@
+diff --git a/hw/audio/Kconfig b/hw/audio/Kconfig
+index e76c69ca7e..74afa21c50 100644
+--- a/hw/audio/Kconfig
++++ b/hw/audio/Kconfig
+@@ -47,3 +47,8 @@ config PL041
+ 
+ config CS4231
+     bool
++
++config VIRTIO_SND
++    bool
++    default y
++    depends on VIRTIO
+diff --git a/hw/audio/meson.build b/hw/audio/meson.build
+index e48a9fc73d..455e6a1501 100644
+--- a/hw/audio/meson.build
++++ b/hw/audio/meson.build
+@@ -12,3 +12,4 @@ softmmu_ss.add(when: 'CONFIG_PL041', if_true: files('pl041.c', 'lm4549.c'))
+ softmmu_ss.add(when: 'CONFIG_SB16', if_true: files('sb16.c'))
+ softmmu_ss.add(when: 'CONFIG_VT82C686', if_true: files('via-ac97.c'))
+ softmmu_ss.add(when: 'CONFIG_WM8750', if_true: files('wm8750.c'))
++softmmu_ss.add(when: 'CONFIG_VIRTIO_SND', if_true: files('virtio-snd.c'))
+diff --git a/hw/virtio/meson.build b/hw/virtio/meson.build
+index 67dc77e00f..6e74be7d1c 100644
+--- a/hw/virtio/meson.build
++++ b/hw/virtio/meson.build
+@@ -49,6 +49,7 @@ virtio_pci_ss.add(when: 'CONFIG_VIRTIO_SERIAL', if_true: files('virtio-serial-pc
+ virtio_pci_ss.add(when: 'CONFIG_VIRTIO_PMEM', if_true: files('virtio-pmem-pci.c'))
+ virtio_pci_ss.add(when: 'CONFIG_VIRTIO_IOMMU', if_true: files('virtio-iommu-pci.c'))
+ virtio_pci_ss.add(when: 'CONFIG_VIRTIO_MEM', if_true: files('virtio-mem-pci.c'))
++virtio_pci_ss.add(when: 'CONFIG_VIRTIO_SND', if_true: files('virtio-snd-pci.c'))
+ 
+ virtio_ss.add_all(when: 'CONFIG_VIRTIO_PCI', if_true: virtio_pci_ss)
+ 
+diff --git a/include/hw/pci/pci.h b/include/hw/pci/pci.h
+index 3a32b8dd40..0b4f34dec1 100644
+--- a/include/hw/pci/pci.h
++++ b/include/hw/pci/pci.h
+@@ -86,6 +86,7 @@ extern bool pci_available;
+ #define PCI_DEVICE_ID_VIRTIO_PMEM        0x1013
+ #define PCI_DEVICE_ID_VIRTIO_IOMMU       0x1014
+ #define PCI_DEVICE_ID_VIRTIO_MEM         0x1015
++#define PCI_DEVICE_ID_VIRTIO_SND         0x1019
+ 
+ #define PCI_VENDOR_ID_REDHAT             0x1b36
+ #define PCI_DEVICE_ID_REDHAT_BRIDGE      0x0001
+diff --git a/include/hw/virtio/virtio-access.h b/include/hw/virtio/virtio-access.h
+index 6818a23a2d..df6c86c8e5 100644
+--- a/include/hw/virtio/virtio-access.h
++++ b/include/hw/virtio/virtio-access.h
+@@ -20,9 +20,9 @@
+ #include "hw/virtio/virtio.h"
+ #include "hw/virtio/virtio-bus.h"
+ 
+-#if defined(TARGET_PPC64) || defined(TARGET_ARM)
+-#define LEGACY_VIRTIO_IS_BIENDIAN 1
+-#endif
++//#if defined(TARGET_PPC64) || defined(TARGET_ARM)
++//#define LEGACY_VIRTIO_IS_BIENDIAN 1
++//#endif
+ 
+ static inline bool virtio_access_is_big_endian(VirtIODevice *vdev)
+ {
+diff --git a/include/standard-headers/linux/virtio_snd.h b/include/standard-headers/linux/virtio_snd.h
+index 1af96b9fc6..38d6dac656 100644
+--- a/include/standard-headers/linux/virtio_snd.h
++++ b/include/standard-headers/linux/virtio_snd.h
+@@ -1,200 +1,86 @@
+ /* SPDX-License-Identifier: BSD-3-Clause */
+ /*
+- * Copyright (C) 2021 OpenSynergy GmbH
++ * Copyright (C) 2019  OpenSynergy GmbH
++ *
++ * This header is BSD licensed so anyone can use the definitions to
++ * implement compatible drivers/servers.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the name of OpenSynergy GmbH nor the names of its contributors
++ *    may be used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL IBM OR
++ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
++ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
++ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
+  */
++
+ #ifndef VIRTIO_SND_IF_H
+ #define VIRTIO_SND_IF_H
+ 
++#include <linux/types.h> /* __u{8,16,32,64} definitions */
++
++#include "standard-headers/linux/virtio_ids.h"
+ #include "standard-headers/linux/virtio_types.h"
+ 
+ /*******************************************************************************
+- * CONFIGURATION SPACE
++ * FEATURE BITS
+  */
+-struct virtio_snd_config {
+-	/* # of available physical jacks */
+-	uint32_t jacks;
+-	/* # of available PCM streams */
+-	uint32_t streams;
+-	/* # of available channel maps */
+-	uint32_t chmaps;
+-};
+-
+ enum {
+-	/* device virtqueue indexes */
+-	VIRTIO_SND_VQ_CONTROL = 0,
+-	VIRTIO_SND_VQ_EVENT,
+-	VIRTIO_SND_VQ_TX,
+-	VIRTIO_SND_VQ_RX,
+-	/* # of device virtqueues */
+-	VIRTIO_SND_VQ_MAX
++	/* output PCM stream support */
++	VIRTIO_SND_F_PCM_OUTPUT = 0,
++	/* input PCM stream support */
++	VIRTIO_SND_F_PCM_INPUT
+ };
+ 
+ /*******************************************************************************
+- * COMMON DEFINITIONS
++ * CONFIGURATION SPACE
+  */
+ 
+-/* supported dataflow directions */
++/* supported PCM sample formats */
+ enum {
+-	VIRTIO_SND_D_OUTPUT = 0,
+-	VIRTIO_SND_D_INPUT
++	VIRTIO_SND_PCM_FMT_S8 = 0,
++	VIRTIO_SND_PCM_FMT_U8,
++	VIRTIO_SND_PCM_FMT_S16,
++	VIRTIO_SND_PCM_FMT_U16,
++	VIRTIO_SND_PCM_FMT_S32,
++	VIRTIO_SND_PCM_FMT_U32,
++	VIRTIO_SND_PCM_FMT_FLOAT,
++	VIRTIO_SND_PCM_FMT_FLOAT64
+ };
+ 
+-enum {
+-	/* jack control request types */
+-	VIRTIO_SND_R_JACK_INFO = 1,
+-	VIRTIO_SND_R_JACK_REMAP,
+-
+-	/* PCM control request types */
+-	VIRTIO_SND_R_PCM_INFO = 0x0100,
+-	VIRTIO_SND_R_PCM_SET_PARAMS,
+-	VIRTIO_SND_R_PCM_PREPARE,
+-	VIRTIO_SND_R_PCM_RELEASE,
+-	VIRTIO_SND_R_PCM_START,
+-	VIRTIO_SND_R_PCM_STOP,
+-
+-	/* channel map control request types */
+-	VIRTIO_SND_R_CHMAP_INFO = 0x0200,
+-
+-	/* jack event types */
+-	VIRTIO_SND_EVT_JACK_CONNECTED = 0x1000,
+-	VIRTIO_SND_EVT_JACK_DISCONNECTED,
+-
+-	/* PCM event types */
+-	VIRTIO_SND_EVT_PCM_PERIOD_ELAPSED = 0x1100,
+-	VIRTIO_SND_EVT_PCM_XRUN,
+-
+-	/* common status codes */
+-	VIRTIO_SND_S_OK = 0x8000,
+-	VIRTIO_SND_S_BAD_MSG,
+-	VIRTIO_SND_S_NOT_SUPP,
+-	VIRTIO_SND_S_IO_ERR
+-};
++#define VIRTIO_SND_PCM_FMTBIT(bit) \
++	(1U << VIRTIO_SND_PCM_FMT_ ## bit)
+ 
+-/* common header */
+-struct virtio_snd_hdr {
+-	uint32_t code;
+-};
+-
+-/* event notification */
+-struct virtio_snd_event {
+-	/* VIRTIO_SND_EVT_XXX */
+-	struct virtio_snd_hdr hdr;
+-	/* optional event data */
+-	uint32_t data;
+-};
+-
+-/* common control request to query an item information */
+-struct virtio_snd_query_info {
+-	/* VIRTIO_SND_R_XXX_INFO */
+-	struct virtio_snd_hdr hdr;
+-	/* item start identifier */
+-	uint32_t start_id;
+-	/* item count to query */
+-	uint32_t count;
+-	/* item information size in bytes */
+-	uint32_t size;
+-};
+-
+-/* common item information header */
+-struct virtio_snd_info {
+-	/* function group node id (High Definition Audio Specification 7.1.2) */
+-	uint32_t hda_fn_nid;
+-};
+-
+-/*******************************************************************************
+- * JACK CONTROL MESSAGES
+- */
+-struct virtio_snd_jack_hdr {
+-	/* VIRTIO_SND_R_JACK_XXX */
+-	struct virtio_snd_hdr hdr;
+-	/* 0 ... virtio_snd_config::jacks - 1 */
+-	uint32_t jack_id;
+-};
+-
+-/* supported jack features */
+ enum {
+-	VIRTIO_SND_JACK_F_REMAP = 0
+-};
+-
+-struct virtio_snd_jack_info {
+-	/* common header */
+-	struct virtio_snd_info hdr;
+-	/* supported feature bit map (1 << VIRTIO_SND_JACK_F_XXX) */
+-	uint32_t features;
+-	/* pin configuration (High Definition Audio Specification 7.3.3.31) */
+-	uint32_t hda_reg_defconf;
+-	/* pin capabilities (High Definition Audio Specification 7.3.4.9) */
+-	uint32_t hda_reg_caps;
+-	/* current jack connection status (0: disconnected, 1: connected) */
+-	uint8_t connected;
+-
+-	uint8_t padding[7];
+-};
+-
+-/* jack remapping control request */
+-struct virtio_snd_jack_remap {
+-	/* .code = VIRTIO_SND_R_JACK_REMAP */
+-	struct virtio_snd_jack_hdr hdr;
+-	/* selected association number */
+-	uint32_t association;
+-	/* selected sequence number */
+-	uint32_t sequence;
+-};
+-
+-/*******************************************************************************
+- * PCM CONTROL MESSAGES
+- */
+-struct virtio_snd_pcm_hdr {
+-	/* VIRTIO_SND_R_PCM_XXX */
+-	struct virtio_snd_hdr hdr;
+-	/* 0 ... virtio_snd_config::streams - 1 */
+-	uint32_t stream_id;
+-};
+-
+-/* supported PCM stream features */
+-enum {
+-	VIRTIO_SND_PCM_F_SHMEM_HOST = 0,
+-	VIRTIO_SND_PCM_F_SHMEM_GUEST,
+-	VIRTIO_SND_PCM_F_MSG_POLLING,
+-	VIRTIO_SND_PCM_F_EVT_SHMEM_PERIODS,
+-	VIRTIO_SND_PCM_F_EVT_XRUNS
+-};
+-
+-/* supported PCM sample formats */
+-enum {
+-	/* analog formats (width / physical width) */
+-	VIRTIO_SND_PCM_FMT_IMA_ADPCM = 0,	/*  4 /  4 bits */
+-	VIRTIO_SND_PCM_FMT_MU_LAW,		/*  8 /  8 bits */
+-	VIRTIO_SND_PCM_FMT_A_LAW,		/*  8 /  8 bits */
+-	VIRTIO_SND_PCM_FMT_S8,			/*  8 /  8 bits */
+-	VIRTIO_SND_PCM_FMT_U8,			/*  8 /  8 bits */
+-	VIRTIO_SND_PCM_FMT_S16,			/* 16 / 16 bits */
+-	VIRTIO_SND_PCM_FMT_U16,			/* 16 / 16 bits */
+-	VIRTIO_SND_PCM_FMT_S18_3,		/* 18 / 24 bits */
+-	VIRTIO_SND_PCM_FMT_U18_3,		/* 18 / 24 bits */
+-	VIRTIO_SND_PCM_FMT_S20_3,		/* 20 / 24 bits */
+-	VIRTIO_SND_PCM_FMT_U20_3,		/* 20 / 24 bits */
+-	VIRTIO_SND_PCM_FMT_S24_3,		/* 24 / 24 bits */
+-	VIRTIO_SND_PCM_FMT_U24_3,		/* 24 / 24 bits */
+-	VIRTIO_SND_PCM_FMT_S20,			/* 20 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_U20,			/* 20 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_S24,			/* 24 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_U24,			/* 24 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_S32,			/* 32 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_U32,			/* 32 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_FLOAT,		/* 32 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_FLOAT64,		/* 64 / 64 bits */
+-	/* digital formats (width / physical width) */
+-	VIRTIO_SND_PCM_FMT_DSD_U8,		/*  8 /  8 bits */
+-	VIRTIO_SND_PCM_FMT_DSD_U16,		/* 16 / 16 bits */
+-	VIRTIO_SND_PCM_FMT_DSD_U32,		/* 32 / 32 bits */
+-	VIRTIO_SND_PCM_FMT_IEC958_SUBFRAME	/* 32 / 32 bits */
++	VIRTIO_SND_PCM_FMTBIT_S8 = VIRTIO_SND_PCM_FMTBIT(S8),
++	VIRTIO_SND_PCM_FMTBIT_U8 = VIRTIO_SND_PCM_FMTBIT(U8),
++	VIRTIO_SND_PCM_FMTBIT_S16 = VIRTIO_SND_PCM_FMTBIT(S16),
++	VIRTIO_SND_PCM_FMTBIT_U16 = VIRTIO_SND_PCM_FMTBIT(U16),
++	VIRTIO_SND_PCM_FMTBIT_S32 = VIRTIO_SND_PCM_FMTBIT(S32),
++	VIRTIO_SND_PCM_FMTBIT_U32 = VIRTIO_SND_PCM_FMTBIT(U32),
++	VIRTIO_SND_PCM_FMTBIT_FLOAT = VIRTIO_SND_PCM_FMTBIT(FLOAT),
++	VIRTIO_SND_PCM_FMTBIT_FLOAT64 = VIRTIO_SND_PCM_FMTBIT(FLOAT64)
+ };
+ 
+ /* supported PCM frame rates */
+ enum {
+-	VIRTIO_SND_PCM_RATE_5512 = 0,
+-	VIRTIO_SND_PCM_RATE_8000,
++	VIRTIO_SND_PCM_RATE_8000 = 0,
+ 	VIRTIO_SND_PCM_RATE_11025,
+ 	VIRTIO_SND_PCM_RATE_16000,
+ 	VIRTIO_SND_PCM_RATE_22050,
+@@ -205,130 +91,174 @@ enum {
+ 	VIRTIO_SND_PCM_RATE_88200,
+ 	VIRTIO_SND_PCM_RATE_96000,
+ 	VIRTIO_SND_PCM_RATE_176400,
+-	VIRTIO_SND_PCM_RATE_192000,
+-	VIRTIO_SND_PCM_RATE_384000
++	VIRTIO_SND_PCM_RATE_192000
++};
++
++#define VIRTIO_SND_PCM_RATEBIT(bit) \
++	(1U << VIRTIO_SND_PCM_RATE_ ## bit)
++
++enum {
++	VIRTIO_SND_PCM_RATEBIT_8000 = VIRTIO_SND_PCM_RATEBIT(8000),
++	VIRTIO_SND_PCM_RATEBIT_11025 = VIRTIO_SND_PCM_RATEBIT(11025),
++	VIRTIO_SND_PCM_RATEBIT_16000 = VIRTIO_SND_PCM_RATEBIT(16000),
++	VIRTIO_SND_PCM_RATEBIT_22050 = VIRTIO_SND_PCM_RATEBIT(22050),
++	VIRTIO_SND_PCM_RATEBIT_32000 = VIRTIO_SND_PCM_RATEBIT(32000),
++	VIRTIO_SND_PCM_RATEBIT_44100 = VIRTIO_SND_PCM_RATEBIT(44100),
++	VIRTIO_SND_PCM_RATEBIT_48000 = VIRTIO_SND_PCM_RATEBIT(48000),
++	VIRTIO_SND_PCM_RATEBIT_64000 = VIRTIO_SND_PCM_RATEBIT(64000),
++	VIRTIO_SND_PCM_RATEBIT_88200 = VIRTIO_SND_PCM_RATEBIT(88200),
++	VIRTIO_SND_PCM_RATEBIT_96000 = VIRTIO_SND_PCM_RATEBIT(96000),
++	VIRTIO_SND_PCM_RATEBIT_176400 = VIRTIO_SND_PCM_RATEBIT(176400),
++	VIRTIO_SND_PCM_RATEBIT_192000 = VIRTIO_SND_PCM_RATEBIT(192000)
+ };
+ 
+-struct virtio_snd_pcm_info {
+-	/* common header */
+-	struct virtio_snd_info hdr;
+-	/* supported feature bit map (1 << VIRTIO_SND_PCM_F_XXX) */
+-	uint32_t features;
+-	/* supported sample format bit map (1 << VIRTIO_SND_PCM_FMT_XXX) */
+-	uint64_t formats;
+-	/* supported frame rate bit map (1 << VIRTIO_SND_PCM_RATE_XXX) */
+-	uint64_t rates;
+-	/* dataflow direction (VIRTIO_SND_D_XXX) */
+-	uint8_t direction;
++/* a PCM stream configuration */
++struct virtio_pcm_stream_config {
+ 	/* minimum # of supported channels */
+-	uint8_t channels_min;
++	__u8 channels_min;
+ 	/* maximum # of supported channels */
+-	uint8_t channels_max;
++	__u8 channels_max;
++	/* supported sample format bit map (VIRTIO_SND_PCM_FMTBIT_XXX) */
++	__virtio16 formats;
++	/* supported frame rate bit map (VIRTIO_SND_PCM_RATEBIT_XXX) */
++	__virtio16 rates;
+ 
+-	uint8_t padding[5];
++	__u16 padding;
+ };
+ 
+-/* set PCM stream format */
+-struct virtio_snd_pcm_set_params {
+-	/* .code = VIRTIO_SND_R_PCM_SET_PARAMS */
+-	struct virtio_snd_pcm_hdr hdr;
+-	/* size of the hardware buffer */
+-	uint32_t buffer_bytes;
+-	/* size of the hardware period */
+-	uint32_t period_bytes;
+-	/* selected feature bit map (1 << VIRTIO_SND_PCM_F_XXX) */
+-	uint32_t features;
+-	/* selected # of channels */
+-	uint8_t channels;
+-	/* selected sample format (VIRTIO_SND_PCM_FMT_XXX) */
+-	uint8_t format;
+-	/* selected frame rate (VIRTIO_SND_PCM_RATE_XXX) */
+-	uint8_t rate;
+-
+-	uint8_t padding;
++/* a device configuration space */
++struct virtio_snd_config {
++	struct virtio_pcm_config {
++		struct virtio_pcm_stream_config output;
++		struct virtio_pcm_stream_config input;
++	} pcm;
+ };
+ 
+ /*******************************************************************************
+- * PCM I/O MESSAGES
++ * CONTROL REQUESTS
+  */
+ 
+-/* I/O request header */
+-struct virtio_snd_pcm_xfer {
+-	/* 0 ... virtio_snd_config::streams - 1 */
+-	uint32_t stream_id;
++enum {
++	/* PCM control request types */
++	VIRTIO_SND_R_PCM_CHMAP_INFO = 0,
++	VIRTIO_SND_R_PCM_SET_FORMAT,
++	VIRTIO_SND_R_PCM_PREPARE,
++	VIRTIO_SND_R_PCM_START,
++	VIRTIO_SND_R_PCM_STOP,
++	VIRTIO_SND_R_PCM_PAUSE,
++	VIRTIO_SND_R_PCM_UNPAUSE,
++
++	/* generic status codes */
++	VIRTIO_SND_S_OK = 0x8000,
++	VIRTIO_SND_S_BAD_MSG,
++	VIRTIO_SND_S_NOT_SUPP,
++	VIRTIO_SND_S_IO_ERR
+ };
+ 
+-/* I/O request status */
+-struct virtio_snd_pcm_status {
+-	/* VIRTIO_SND_S_XXX */
+-	uint32_t status;
+-	/* current device latency */
+-	uint32_t latency_bytes;
++/* a generic control request/response header */
++struct virtio_snd_hdr {
++	union {
++		/* VIRTIO_SND_R_XXX */
++		__virtio32 code;
++		/* VIRTIO_SND_S_XXX */
++		__virtio32 status;
++	};
+ };
+ 
+-/*******************************************************************************
+- * CHANNEL MAP CONTROL MESSAGES
+- */
+-struct virtio_snd_chmap_hdr {
+-	/* VIRTIO_SND_R_CHMAP_XXX */
+-	struct virtio_snd_hdr hdr;
+-	/* 0 ... virtio_snd_config::chmaps - 1 */
+-	uint32_t chmap_id;
++/* supported PCM stream types */
++enum {
++	VIRTIO_SND_PCM_T_OUTPUT = 0,
++	VIRTIO_SND_PCM_T_INPUT
++};
++
++/* PCM control request header */
++struct virtio_snd_pcm_hdr {
++	/* VIRTIO_SND_R_PCM_XXX */
++	__virtio32 code;
++	/* a PCM stream type (VIRTIO_SND_PCM_T_XXX) */
++	__virtio32 stream;
++};
++
++/* set PCM stream format */
++struct virtio_snd_pcm_set_format {
++	/* VIRTIO_SND_R_PCM_SET_FORMAT */
++	struct virtio_snd_pcm_hdr hdr;
++	/* # of channels */
++	__virtio16 channels;
++	/* a PCM sample format (VIRTIO_SND_PCM_FMT_XXX) */
++	__virtio16 format;
++	/* a PCM frame rate (VIRTIO_SND_PCM_RATE_XXX) */
++	__virtio16 rate;
++
++	__u16 padding;
+ };
+ 
+ /* standard channel position definition */
+ enum {
+-	VIRTIO_SND_CHMAP_NONE = 0,	/* undefined */
+-	VIRTIO_SND_CHMAP_NA,		/* silent */
+-	VIRTIO_SND_CHMAP_MONO,		/* mono stream */
+-	VIRTIO_SND_CHMAP_FL,		/* front left */
+-	VIRTIO_SND_CHMAP_FR,		/* front right */
+-	VIRTIO_SND_CHMAP_RL,		/* rear left */
+-	VIRTIO_SND_CHMAP_RR,		/* rear right */
+-	VIRTIO_SND_CHMAP_FC,		/* front center */
+-	VIRTIO_SND_CHMAP_LFE,		/* low frequency (LFE) */
+-	VIRTIO_SND_CHMAP_SL,		/* side left */
+-	VIRTIO_SND_CHMAP_SR,		/* side right */
+-	VIRTIO_SND_CHMAP_RC,		/* rear center */
+-	VIRTIO_SND_CHMAP_FLC,		/* front left center */
+-	VIRTIO_SND_CHMAP_FRC,		/* front right center */
+-	VIRTIO_SND_CHMAP_RLC,		/* rear left center */
+-	VIRTIO_SND_CHMAP_RRC,		/* rear right center */
+-	VIRTIO_SND_CHMAP_FLW,		/* front left wide */
+-	VIRTIO_SND_CHMAP_FRW,		/* front right wide */
+-	VIRTIO_SND_CHMAP_FLH,		/* front left high */
+-	VIRTIO_SND_CHMAP_FCH,		/* front center high */
+-	VIRTIO_SND_CHMAP_FRH,		/* front right high */
+-	VIRTIO_SND_CHMAP_TC,		/* top center */
+-	VIRTIO_SND_CHMAP_TFL,		/* top front left */
+-	VIRTIO_SND_CHMAP_TFR,		/* top front right */
+-	VIRTIO_SND_CHMAP_TFC,		/* top front center */
+-	VIRTIO_SND_CHMAP_TRL,		/* top rear left */
+-	VIRTIO_SND_CHMAP_TRR,		/* top rear right */
+-	VIRTIO_SND_CHMAP_TRC,		/* top rear center */
+-	VIRTIO_SND_CHMAP_TFLC,		/* top front left center */
+-	VIRTIO_SND_CHMAP_TFRC,		/* top front right center */
+-	VIRTIO_SND_CHMAP_TSL,		/* top side left */
+-	VIRTIO_SND_CHMAP_TSR,		/* top side right */
+-	VIRTIO_SND_CHMAP_LLFE,		/* left LFE */
+-	VIRTIO_SND_CHMAP_RLFE,		/* right LFE */
+-	VIRTIO_SND_CHMAP_BC,		/* bottom center */
+-	VIRTIO_SND_CHMAP_BLC,		/* bottom left center */
+-	VIRTIO_SND_CHMAP_BRC		/* bottom right center */
++	VIRTIO_SND_PCM_CH_NONE = 0,	/* undefined */
++	VIRTIO_SND_PCM_CH_NA,		/* silent */
++	VIRTIO_SND_PCM_CH_MONO,		/* mono stream */
++	VIRTIO_SND_PCM_CH_FL,		/* front left */
++	VIRTIO_SND_PCM_CH_FR,		/* front right */
++	VIRTIO_SND_PCM_CH_RL,		/* rear left */
++	VIRTIO_SND_PCM_CH_RR,		/* rear right */
++	VIRTIO_SND_PCM_CH_FC,		/* front center */
++	VIRTIO_SND_PCM_CH_LFE,		/* low frequency (LFE) */
++	VIRTIO_SND_PCM_CH_SL,		/* side left */
++	VIRTIO_SND_PCM_CH_SR,		/* side right */
++	VIRTIO_SND_PCM_CH_RC,		/* rear center */
++	VIRTIO_SND_PCM_CH_FLC,		/* front left center */
++	VIRTIO_SND_PCM_CH_FRC,		/* front right center */
++	VIRTIO_SND_PCM_CH_RLC,		/* rear left center */
++	VIRTIO_SND_PCM_CH_RRC,		/* rear right center */
++	VIRTIO_SND_PCM_CH_FLW,		/* front left wide */
++	VIRTIO_SND_PCM_CH_FRW,		/* front right wide */
++	VIRTIO_SND_PCM_CH_FLH,		/* front left high */
++	VIRTIO_SND_PCM_CH_FCH,		/* front center high */
++	VIRTIO_SND_PCM_CH_FRH,		/* front right high */
++	VIRTIO_SND_PCM_CH_TC,		/* top center */
++	VIRTIO_SND_PCM_CH_TFL,		/* top front left */
++	VIRTIO_SND_PCM_CH_TFR,		/* top front right */
++	VIRTIO_SND_PCM_CH_TFC,		/* top front center */
++	VIRTIO_SND_PCM_CH_TRL,		/* top rear left */
++	VIRTIO_SND_PCM_CH_TRR,		/* top rear right */
++	VIRTIO_SND_PCM_CH_TRC,		/* top rear center */
++	VIRTIO_SND_PCM_CH_TFLC,		/* top front left center */
++	VIRTIO_SND_PCM_CH_TFRC,		/* top front right center */
++	VIRTIO_SND_PCM_CH_TSL,		/* top side left */
++	VIRTIO_SND_PCM_CH_TSR,		/* top side right */
++	VIRTIO_SND_PCM_CH_LLFE,		/* left LFE */
++	VIRTIO_SND_PCM_CH_RLFE,		/* right LFE */
++	VIRTIO_SND_PCM_CH_BC,		/* bottom center */
++	VIRTIO_SND_PCM_CH_BLC,		/* bottom left center */
++	VIRTIO_SND_PCM_CH_BRC		/* bottom right center */
+ };
+ 
+-/* maximum possible number of channels */
+-#define VIRTIO_SND_CHMAP_MAX_SIZE	18
++/* a maximum possible number of channels */
++#define VIRTIO_SND_PCM_CH_MAX		256
+ 
+-struct virtio_snd_chmap_info {
+-	/* common header */
+-	struct virtio_snd_info hdr;
+-	/* dataflow direction (VIRTIO_SND_D_XXX) */
+-	uint8_t direction;
+-	/* # of valid channel position values */
+-	uint8_t channels;
+-	/* channel position values (VIRTIO_SND_CHMAP_XXX) */
+-	uint8_t positions[VIRTIO_SND_CHMAP_MAX_SIZE];
++/* response containing a PCM channel map information */
++struct virtio_snd_pcm_chmap_info {
++	/* VIRTIO_SND_S_XXX */
++	__virtio32 status;
++	/* # of valid entries in the positions array */
++	__virtio32 npositions;
++	/* PCM channel positions */
++	__u8 positions[VIRTIO_SND_PCM_CH_MAX];
++};
++
++/* PCM I/O request header */
++struct virtio_snd_pcm_xfer {
++	/* a PCM stream type (VIRTIO_SND_PCM_T_XXX) */
++	__virtio32 stream;
++};
++
++/* PCM I/O request status */
++struct virtio_snd_pcm_xfer_status {
++	/* VIRTIO_SND_S_XXX */
++	__virtio32 status;
++	/* an actual read/written amount of bytes */
++	__virtio32 actual_length;
+ };
+ 
+ #endif /* VIRTIO_SND_IF_H */
+diff --git a/roms/seabios-hppa b/roms/seabios-hppa
+index bf3404006f..458626c4c6 160000
+--- a/roms/seabios-hppa
++++ b/roms/seabios-hppa
+@@ -1 +1 @@
+-Subproject commit bf3404006fd2c832857eb57e6f853862f97dacea
++Subproject commit 458626c4c6441045c0612f24313c7cf1f95e71c6
+diff --git a/roms/skiboot b/roms/skiboot
+index 820d43c0a7..24a7eb3596 160000
+--- a/roms/skiboot
++++ b/roms/skiboot
+@@ -1 +1 @@
+-Subproject commit 820d43c0a7751e75a8830561f35535dfffd522bd
++Subproject commit 24a7eb35966d93455520bc2debdd7954314b638b
