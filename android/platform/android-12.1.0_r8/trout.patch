@@ -1,0 +1,323 @@
+
+project device/generic/car/
+diff --git a/emulator/audio/driver/audio_hw.c b/emulator/audio/driver/audio_hw.c
+index 65cbb11..06b0fe8 100644
+--- a/emulator/audio/driver/audio_hw.c
++++ b/emulator/audio/driver/audio_hw.c
+@@ -1193,8 +1193,6 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
+         pthread_cond_init(&out->worker_wake, NULL);
+         out->worker_standby = true;
+         out->worker_exit = false;
+-        pthread_create(&out->worker_thread, NULL, out_write_worker, out);
+-        set_shortened_thread_name(out->worker_thread, address);
+ 
+         out->enabled_channels = BOTH_CHANNELS;
+         // For targets where output streams are closed regularly, currently ducked/muted addresses
+@@ -1220,6 +1218,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
+                  out->bus_address, out->enabled_channels == RIGHT_CHANNEL ? "Right" : "Left");
+             }
+         }
++        pthread_create(&out->worker_thread, NULL, out_write_worker, out);
++        set_shortened_thread_name(out->worker_thread, address);
+         *stream_out = &out->stream;
+         ALOGD("%s bus: %s", __func__, out->bus_address);
+     }
+
+project device/google/cuttlefish/
+diff --git a/shared/config/init.vendor.rc b/shared/config/init.vendor.rc
+index 94ef593cd..011e45275 100644
+--- a/shared/config/init.vendor.rc
++++ b/shared/config/init.vendor.rc
+@@ -49,7 +49,7 @@ on fs
+ 
+     start setup_wifi
+     # works around framework netiface enumeration issue
+-    start rename_eth0
++    # start rename_eth0
+ 
+     # So GceBootReporter can print to kmsg
+     chmod 622 /dev/kmsg
+
+project device/google/trout/
+diff --git a/aosp_trout_arm64.mk b/aosp_trout_arm64.mk
+index 641aea9..a57b3e9 100644
+--- a/aosp_trout_arm64.mk
++++ b/aosp_trout_arm64.mk
+@@ -56,10 +56,12 @@ LOCAL_TRACING_SERVER_PROPERTIES ?= \
+ 
+ include device/google/trout/aosp_trout_common.mk
+ 
+-DEVICE_MANIFEST_FILE += device/google/trout/manifest.xml
++DEVICE_MANIFEST_FILE += device/google/trout/manifest_x86.xml
++DEVICE_MATRIX_FILE += device/google/trout/compatibility_matrix.xml
++DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := device/google/trout/framework_compatibility_matrix.xml
+ 
+-PRODUCT_PROPERTY_OVERRIDES += \
+-	vendor.ser.bt-uart?= \
++# PRODUCT_PROPERTY_OVERRIDES += \
++# 	vendor.ser.bt-uart?= \
+ 
+ PRODUCT_PACKAGES += \
+ 	vport_trigger \
+@@ -90,3 +92,25 @@ PRODUCT_COPY_FILES += $(SENSOR_HAL_CONFIG_COPY_FILE)
+ PRODUCT_NAME := aosp_trout_arm64
+ PRODUCT_DEVICE := trout_arm64
+ PRODUCT_MODEL := arm64 trout
++
++
++
++
++BOARD_KERNEL_CMDLINE += \
++   androidboot.qemu=1 \
++   androidboot.selinux=permissive \
++   androidboot.fstab_suffix=trout \
++   androidboot.hardware=cutf_cvm \
++   androidboot.slot_suffix=_a \
++   androidboot.hardware.gralloc=minigbm \
++   androidboot.hardware.hwcomposer=drm_minigbm \
++   androidboot.hardware.egl=mesa \
++   androidboot.logcat=*:V \
++   androidboot.vendor.vehiclehal.server.cid=2 \
++   androidboot.vendor.vehiclehal.server.port=9300 \
++   androidboot.vendor.vehiclehal.server.psf=/data/data/power.file \
++   androidboot.vendor.vehiclehal.server.pss=/data/data/power.socket \
++   androidboot.boot_devices=4010000000.pcie
++
++# KERNEL_VENDOR_CMDLINE += KERNEL_VENDOR_CMDLINE
++# INTERNAL_KERNEL_CMDLINE += INTERNAL_KERNEL_CMDLINE
+diff --git a/aosp_trout_common.mk b/aosp_trout_common.mk
+index c5d9850..e532b7a 100644
+--- a/aosp_trout_common.mk
++++ b/aosp_trout_common.mk
+@@ -63,7 +63,8 @@ LOCAL_DUMPSTATE_PROPERTIES ?= \
+     ro.vendor.helpersystem.log_loc=/data/host_logs \
+ 
+ # Vehicle HAL
+-LOCAL_VHAL_PRODUCT_PACKAGE ?= android.hardware.automotive.vehicle@2.0-virtualization-service
++LOCAL_VHAL_PRODUCT_PACKAGE ?= android.hardware.automotive.vehicle@2.0-virtualization-service \
++                                android.hardware.automotive.vehicle@2.0-virtualization-grpc-server
+ 
+ # EVS HAL
+ LOCAL_EVS_PRODUCT_COPY_FILES ?= \
+diff --git a/hal/vehicle/2.0/Android.bp b/hal/vehicle/2.0/Android.bp
+index 38db924..8c60243 100644
+--- a/hal/vehicle/2.0/Android.bp
++++ b/hal/vehicle/2.0/Android.bp
+@@ -172,6 +172,7 @@ cc_binary {
+     defaults: ["vhal_v2_0_defaults"],
+     host_supported: true,
+     vendor: true,
++    relative_install_path: "hw",
+     srcs: [
+         "VirtualizationGrpcServer.cpp",
+     ],
+diff --git a/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc b/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc
+index 1101b08..d9a9110 100644
+--- a/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc
++++ b/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc
+@@ -3,8 +3,10 @@
+ # so the command line arguments are expected, though not conventionally used in Android
+ service vendor.vehicle-hal-2.0-server \
+         /vendor/bin/hw/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server \
+-        -server_cid ${ro.vendor.vehiclehal.server.cid:-pleaseconfigurethis} \
+-        -server_port ${ro.vendor.vehiclehal.server.port:-pleaseconfigurethis}
++        -server_cid ${ro.boot.vendor.vehiclehal.server.cid:-pleaseconfigurethis} \
++        -server_port ${ro.boot.vendor.vehiclehal.server.port:-pleaseconfigurethis} \
++        -power_state_file ${ro.boot.vendor.vehiclehal.server.psf:-pleaseconfigurethis} \
++        -power_state_socket ${ro.boot.vendor.vehiclehal.server.pss:-pleaseconfigurethis}
+     class hal
+     user vehicle_network
+     group system inet
+diff --git a/sepolicy/vendor/google/genfs_contexts b/sepolicy/vendor/google/genfs_contexts
+index 8afe34b..68d822a 100644
+--- a/sepolicy/vendor/google/genfs_contexts
++++ b/sepolicy/vendor/google/genfs_contexts
+@@ -1,2 +1,2 @@
+ # TODO(tutankhamen): hardcoded virtio_mmio device just for testing
+-genfscon sysfs /devices/platform/4a00b000.virtio_mmio/virtio11/uevent u:object_r:sysfs_gpu_trout:s0
++genfscon sysfs /devices/pci0000:00/0000:00:07.0 u:object_r:sysfs_gpu_trout:s0
+diff --git a/sepolicy/vendor/google/sysfs_gpu_file.te b/sepolicy/vendor/google/sysfs_gpu_file.te
+index f5b070f..629e06d 100644
+--- a/sepolicy/vendor/google/sysfs_gpu_file.te
++++ b/sepolicy/vendor/google/sysfs_gpu_file.te
+@@ -9,6 +9,7 @@
+ allow surfaceflinger gpu_device:chr_file rw_file_perms;
+ allow surfaceflinger gpu_device:dir r_dir_perms;
+ allow surfaceflinger sysfs_gpu_trout:file r_file_perms;
++allow surfaceflinger sysfs_gpu_trout:dir r_dir_perms;
+ 
+ # TODO(tutankhamen): Not sure we need both appdomain and untrusted_app
+ allow { appdomain -isolated_app } gpu_device:chr_file rw_file_perms;
+diff --git a/trout_arm64/BoardConfig.mk b/trout_arm64/BoardConfig.mk
+index b120c2e..91fe9b9 100644
+--- a/trout_arm64/BoardConfig.mk
++++ b/trout_arm64/BoardConfig.mk
+@@ -29,3 +29,93 @@ BOARD_BOOT_HEADER_VERSION := 3
+ # Android Bluetooth stack configuration
+ LOCAL_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR ?= device/google/trout/product_files/bluetooth
+ BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR := $(LOCAL_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR)
++
++
++
++
++
++define print-var
++    $(warning @TDA: $(1): '$($(1))')
++endef
++
++define rmdir
++    $(warning @TDA: Removing file/directory: $(1)) \
++    $(shell rm -rf $(1))
++endef
++
++
++
++
++
++
++
++# BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES := true
++
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(wildcard $(TARGET_PREBUILT_MODULES_DIR)/*.ko)
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(filter-out $(TARGET_PREBUILT_MODULES_DIR),$(shell find $(TARGET_PREBUILT_MODULES_DIR) -type f -name *.ko))
++
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := 
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_blk.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio-gpu.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_dma_buf.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_net.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/net_failover.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/failover.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci_legacy_dev.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci_modern_dev.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio-rng.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_snd.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_mmio.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pmem.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/nd_virtio.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_input.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_balloon.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_console.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/vmw_vsock_virtio_transport.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virt_wifi.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/cfg80211.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/rfkill.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(strip $(shell cat $(TARGET_PREBUILT_MODULES_DIR)/modules.load))
++
++
++
++
++$(warning @TDA: ---------------------------------- DEBUG BEGIN ----------------------------------)
++
++$(call print-var,PRODUCT_NAME)
++$(call print-var,PRODUCT_DEVICE)
++$(call print-var,PRODUCT_MODEL)
++$(call print-var,SRC_TARGET_DIR)
++$(call print-var,TARGET_DEVICE_DIR)
++$(call print-var,OUT_DIR)
++$(warning PRODUCT_DIR: $(OUT_DIR)/target/product/$(PRODUCT_DEVICE))
++
++# Modules for vendor image
++# https://source.android.com/docs/core/architecture/kernel/loadable-kernel-modules#android-build-system-support
++# https://source.android.com/docs/core/architecture/kernel/kernel-module-support#full-android
++$(call print-var,BOARD_VENDOR_KERNEL_MODULES)
++
++# Modules for vendor_boot image
++# https://source.android.com/docs/core/architecture/kernel/kernel-module-support#first-stage-init
++$(call print-var,BOARD_VENDOR_RAMDISK_KERNEL_MODULES)
++
++# https://source.android.com/docs/core/architecture/kernel/boot-time-opt#strip-debug-symbols
++$(call print-var,BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES)
++
++$(warning @TDA: ----------------------------------  DEBUG END  ----------------------------------)
++
++
++
++# $(call print-var,TARGET_COPY_OUT_ROOT)
++# $(call print-var,TARGET_COPY_OUT_VENDOR)
++# $(call print-var,PRODUCT_BUILD_SYSTEM_IMAGE)
++# $(call print-var,PRODUCT_BUILD_SYSTEM_OTHER_IMAGE)
++# $(call print-var,PRODUCT_BUILD_BOOT_IMAGE)
++# $(call print-var,PRODUCT_BUILD_VENDOR_BOOT_IMAGE)
++# $(call print-var,PRODUCT_BUILD_RAMDISK_IMAGE)
++# $(call print-var,BOARD_BOOT_HEADER_VERSION)
++# $(call print-var,BOARD_MKBOOTIMG_ARGS)
++# $(call print-var,PRODUCT_PACKAGES)
++# $(call print-var,PRODUCT_OUT)
++# $(call print-var,TARGET_OUT)
+
+project frameworks/av/
+diff --git a/media/utils/include/mediautils/TimeCheck.h b/media/utils/include/mediautils/TimeCheck.h
+index 5ba6d7cdf8..070476dd6b 100644
+--- a/media/utils/include/mediautils/TimeCheck.h
++++ b/media/utils/include/mediautils/TimeCheck.h
+@@ -31,7 +31,7 @@ class TimeCheck {
+ public:
+ 
+     // The default timeout is chosen to be less than system server watchdog timeout
+-    static constexpr uint32_t kDefaultTimeOutMs = 5000;
++    static constexpr uint32_t kDefaultTimeOutMs = 50000;
+ 
+             TimeCheck(const char *tag, uint32_t timeoutMs = kDefaultTimeOutMs);
+             ~TimeCheck();
+
+project hardware/interfaces/
+diff --git a/automotive/vehicle/2.0/default/impl/vhal_v2_0/EmulatedVehicleHal.cpp b/automotive/vehicle/2.0/default/impl/vhal_v2_0/EmulatedVehicleHal.cpp
+index e8b79dc39..0ade1ceca 100644
+--- a/automotive/vehicle/2.0/default/impl/vhal_v2_0/EmulatedVehicleHal.cpp
++++ b/automotive/vehicle/2.0/default/impl/vhal_v2_0/EmulatedVehicleHal.cpp
+@@ -318,8 +318,8 @@ void EmulatedVehicleHal::onCreate() {
+ 
+     mVehicleClient->triggerSendAllValues();
+ 
+-    initObd2LiveFrame(*mPropStore->getConfigOrDie(OBD2_LIVE_FRAME));
+-    initObd2FreezeFrame(*mPropStore->getConfigOrDie(OBD2_FREEZE_FRAME));
++    // initObd2LiveFrame(*mPropStore->getConfigOrDie(OBD2_LIVE_FRAME));
++    // initObd2FreezeFrame(*mPropStore->getConfigOrDie(OBD2_FREEZE_FRAME));
+     mInEmulator = isInEmulator();
+     ALOGD("mInEmulator=%s", mInEmulator ? "true" : "false");
+     mRecurrentTimer.registerRecurrentEvent(kHeartBeatIntervalNs,
+
+project system/core/
+diff --git a/fs_mgr/fs_mgr_fstab.cpp b/fs_mgr/fs_mgr_fstab.cpp
+index f5ab5571f..85b0b4dec 100644
+--- a/fs_mgr/fs_mgr_fstab.cpp
++++ b/fs_mgr/fs_mgr_fstab.cpp
+@@ -424,7 +424,9 @@ std::string GetFstabPath() {
+     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
+         std::string suffix;
+ 
++        LINFO << "@TDA: [" << __FUNCTION__ << ":" << __LINE__ << "] -> " << "prop: '" << prop << "'";
+         if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
++        LINFO << "@TDA: [" << __FUNCTION__ << ":" << __LINE__ << "] -> " << "suffix: '" << suffix << "'";
+ 
+         for (const char* prefix : {// late-boot/post-boot locations
+                                    "/odm/etc/fstab.", "/vendor/etc/fstab.",
+@@ -836,6 +838,7 @@ bool ReadDefaultFstab(Fstab* fstab) {
+     } else {  // normal boot
+         default_fstab_path = GetFstabPath();
+     }
++    LINFO << "@TDA: [" << __FUNCTION__ << ":" << __LINE__ << "] -> " << "default_fstab_path: '" << default_fstab_path << "'";
+ 
+     Fstab default_fstab;
+     if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
+diff --git a/fs_mgr/libfs_avb/fs_avb.cpp b/fs_mgr/libfs_avb/fs_avb.cpp
+index 1da71176c..8ffbd1a77 100644
+--- a/fs_mgr/libfs_avb/fs_avb.cpp
++++ b/fs_mgr/libfs_avb/fs_avb.cpp
+@@ -59,7 +59,13 @@ std::pair<size_t, bool> VerifyVbmetaDigest(const std::vector<VBMetaData>& vbmeta
+         total_size += vbmeta.size();
+     }
+ 
+-    bool matched = (memcmp(hasher.finalize(), expected_digest, Hasher::DIGEST_SIZE) == 0);
++    // bool matched = (memcmp(hasher.finalize(), expected_digest, Hasher::DIGEST_SIZE) == 0);
++    auto actual_digest = hasher.finalize();
++    std::string actual_digest_str = BytesToHex(actual_digest, Hasher::DIGEST_SIZE);
++    LINFO << "@TDA: Actual digest - " << actual_digest_str;
++    std::string expected_digest_str = BytesToHex(expected_digest, Hasher::DIGEST_SIZE);
++    LINFO << "@TDA: Expected digest - " << expected_digest_str;
++    bool matched = (memcmp(actual_digest, expected_digest, Hasher::DIGEST_SIZE) == 0);
+ 
+     return std::make_pair(total_size, matched);
+ }
