@@ -1,0 +1,65 @@
+debug_tda macro intoduced
+remove reset during boot in case of error
+extending kernel command line parameters in the code
+
+
+
+diff --git a/cmd/boot_android.c b/cmd/boot_android.c
+index 84c3a0f6..a3d9d01f 100644
+--- a/cmd/boot_android.c
++++ b/cmd/boot_android.c
+@@ -76,6 +76,17 @@ static int boot_android(struct cmd_tbl *cmdtp, int flag, int argc,
+ 					   boot_dev_desc, misc_part_info_p,
+ 					   slot, verify, load_address,
+ 					   persistant_dev_desc);
++
++	// Extending kernel command line by defined parameters 
++	const char* bootargs_original = env_get("bootargs")
++	const char* bootargs_extention = " androidboot.fstab_suffix=trout";
++	char* bootargs_extended = malloc( strlen( bootargs_original ) + strlen( bootargs_extention ) );
++	strcpy( bootargs_extended, bootargs_original );
++	strcat( bootargs_extended, bootargs_extention );
++	env_set("bootargs", bootargs_extended);
++	debug_tda("ANDROID: bootargs original: \"%s\"\n", bootargs_original);
++	debug_tda("ANDROID: bootargs extended: \"%s\"\n", bootargs_extended);
++
+ 	if (ret < 0) {
+ 		printf("Android boot failed, error %d.\n", ret);
+ 		return CMD_RET_FAILURE;
+diff --git a/cuttlefish.fragment b/cuttlefish.fragment
+index bff4a3dc..b234725d 100644
+--- a/cuttlefish.fragment
++++ b/cuttlefish.fragment
+@@ -58,3 +58,5 @@ CONFIG_SYS_LONGHELP=y
+ 
+ # Must not use RNG from host.
+ # CONFIG_VIRTIO_RNG is not set
++
++CONFIG_VIRTIO_PCI_LEGACY=y
+diff --git a/default_env.txt b/default_env.txt
+index d5dc44ea..776bdbca 100644
+--- a/default_env.txt
++++ b/default_env.txt
+@@ -1,4 +1,4 @@
+-bootcmd=virtio scan && if part number virtio 1 uboot_env uboot_env_part; then if env verified_import virtio 1#uboot_env; then echo "Imported supplementary environment"; else reset; fi; else echo "No supplementary environment"; fi && run uenvcmd || reset
++bootcmd=virtio scan && if part number virtio 1 uboot_env uboot_env_part; then if env verified_import virtio 1#uboot_env; then echo "Imported supplementary environment"; else echo "@TDA 111"; fi; else echo "No supplementary environment"; fi && run uenvcmd || echo "@TDA 222"
+ bootcmd_android=verified_boot_android virtio 0#misc
+ uenvcmd=run bootcmd_android
+ android_keymint_needed=N
+diff --git a/include/log.h b/include/log.h
+index 8a7b961b..3a9023c2 100644
+--- a/include/log.h
++++ b/include/log.h
+@@ -269,6 +269,12 @@ int _log_buffer(enum log_category_t cat, enum log_level_t level,
+ #define debug(fmt, args...)			\
+ 	debug_cond(_DEBUG, fmt, ##args)
+ 
++#define debug_tda(fmt, args...)         \
++   printf("@TDA - [%s:%d] -> " fmt, __FUNCTION__, __LINE__, ##args)
++
++#define debug_tda_marker( )         \
++   printf("@TDA - [%s:%d] -> %s\n", __FUNCTION__, __LINE__, "--------------- MARKER ---------------")
++
+ /* Show a message if not in SPL */
+ #define warn_non_spl(fmt, args...)			\
+ 	debug_cond(!_SPL_BUILD, fmt, ##args)
