@@ -1,0 +1,130 @@
+
+project device/epam/aosp-vhal/
+diff --git a/vehicle/hal/impl/production/someip/src/RenesasSomeIPECUAdapter.cpp b/vehicle/hal/impl/production/someip/src/RenesasSomeIPECUAdapter.cpp
+index e21c536..195bc0f 100644
+--- a/vehicle/hal/impl/production/someip/src/RenesasSomeIPECUAdapter.cpp
++++ b/vehicle/hal/impl/production/someip/src/RenesasSomeIPECUAdapter.cpp
+@@ -363,7 +363,8 @@ StatusCode RenesasSomeIPECUAdapter::subscribe_extension(VehicleProperty vehicleP
+ 
+     tTimerPtr pTimer = nullptr;
+ 
+-    if(static_cast<int32_t>(vehicleProperty) & static_cast<int32_t>(VehiclePropertyChangeMode::CONTINUOUS))
++    VehiclePropertyChangeMode mode;
++    if( getVehiclePropertyChangeMode( vehicleProperty, mode ) && VehiclePropertyChangeMode::CONTINUOUS == mode )
+     {
+         auto adjustedSampleRate = ( sampleRate <= 0 ? 1 : sampleRate );
+         auto foundTimer = mVehiclePropertyToTimerPtrMap.find(vehicleProperty);
+@@ -390,7 +391,8 @@ StatusCode RenesasSomeIPECUAdapter::unsubscribe_extension(VehicleProperty vehicl
+ {
+     MSG_INF("method called. Target property - '%s'", toString(vehicleProperty).c_str());
+ 
+-    if(static_cast<int32_t>(vehicleProperty) & static_cast<int32_t>(VehiclePropertyChangeMode::CONTINUOUS))
++    VehiclePropertyChangeMode mode;
++    if( getVehiclePropertyChangeMode( vehicleProperty, mode ) && VehiclePropertyChangeMode::CONTINUOUS == mode )
+     {
+         tTimerPtr pTimer = nullptr;
+ 
+diff --git a/vehicle/hal/impl/production/viss/src/VissClient.cpp b/vehicle/hal/impl/production/viss/src/VissClient.cpp
+index 0749255..e911c3b 100644
+--- a/vehicle/hal/impl/production/viss/src/VissClient.cpp
++++ b/vehicle/hal/impl/production/viss/src/VissClient.cpp
+@@ -736,16 +736,16 @@ void VissClient::onVissConnectionStatusUpdate( bool connected )
+     carpc::async::Runnable::create_send(
+         [ this ]( )
+         {
+-            std::string message{ epam::VisClient::kAllTag };
+-            bool result = subscribe( tVissPropID{ message } );
+-            MSG_INF( "'%s' subscribe result: %s", message.c_str( ), result ? "true" : "false" );
+-
+-            #if 0
+-            for( auto& pair: mPropertyMappingDB.getVissPropMap( ) )
+-            {
+-                bool result = subscribe( pair.first );
+-                MSG_INF( "'%s' subscribe result: %s", pair.first.propName.c_str( ), result ? "true" : "false" );
+-            }
++            #if 0 // Subscribe to all VISS properties
++                std::string message{ epam::VisClient::kAllTag };
++                bool result = subscribe( tVissPropID{ message } );
++                MSG_INF( "'%s' subscribe result: %s", message.c_str( ), result ? "true" : "false" );
++            #else
++                for( auto& pair: mPropertyMappingDB.getVissPropMap( ) )
++                {
++                    bool result = subscribe( pair.first );
++                    MSG_INF( "'%s' subscribe result: %s", pair.first.propName.c_str( ), result ? "true" : "false" );
++                }
+             #endif
+         }, mContext
+     );
+diff --git a/vehicle/hal/impl/production/viss/src/VissECUAdapter.cpp b/vehicle/hal/impl/production/viss/src/VissECUAdapter.cpp
+index 50f05d7..7769b5d 100644
+--- a/vehicle/hal/impl/production/viss/src/VissECUAdapter.cpp
++++ b/vehicle/hal/impl/production/viss/src/VissECUAdapter.cpp
+@@ -68,7 +68,7 @@ const char* VissECUAdapter::getAdapterName( ) const
+ StatusCode VissECUAdapter::set( const VehiclePropValue& propValue )
+ {
+     MSG_INF( "method called" );
+- 
++
+     android_vehicle::VehiclePropertyAccess access;
+     if( false == getVehiclePropertyAccess( static_cast< VehicleProperty >( propValue.prop ), access ) )
+         return StatusCode::INTERNAL_ERROR;
+@@ -98,7 +98,8 @@ StatusCode VissECUAdapter::subscribe_extension( VehicleProperty vehicleProperty,
+ 
+     tTimerPtr pTimer = nullptr;
+ 
+-    if( static_cast< int32_t >( vehicleProperty ) & static_cast< int32_t >( VehiclePropertyChangeMode::CONTINUOUS ) )
++    VehiclePropertyChangeMode mode;
++    if( getVehiclePropertyChangeMode( vehicleProperty, mode ) && VehiclePropertyChangeMode::CONTINUOUS == mode )
+     {
+         auto adjustedSampleRate = ( sampleRate <= 0 ? 1 : sampleRate );
+         auto foundTimer = mVehiclePropertyToTimerPtrMap.find( vehicleProperty );
+@@ -125,7 +126,8 @@ StatusCode VissECUAdapter::unsubscribe_extension( VehicleProperty vehiclePropert
+ {
+     MSG_INF( "method called. Target property - '%s'", toString( vehicleProperty ).c_str( ) );
+ 
+-    if( static_cast< int32_t >( vehicleProperty ) & static_cast< int32_t >( VehiclePropertyChangeMode::CONTINUOUS ) )
++    VehiclePropertyChangeMode mode;
++    if( getVehiclePropertyChangeMode( vehicleProperty, mode ) && VehiclePropertyChangeMode::CONTINUOUS == mode )
+     {
+         tTimerPtr pTimer = nullptr;
+ 
+
+project vendor/xen/libvisclient/
+diff --git a/VisClient.cpp b/VisClient.cpp
+index 91f9ae2..8ab758f 100644
+--- a/VisClient.cpp
++++ b/VisClient.cpp
+@@ -5,8 +5,8 @@
+  *
+  */
+ 
+-// #define DUMP_ALL_PARSED_RESULTS
+-// #define LOG_NDEBUG 0
++#define DUMP_ALL_PARSED_RESULTS
++#define LOG_NDEBUG 0
+ #define LOG_TAG "visclient"
+ 
+ #include <cutils/properties.h>
+diff --git a/VisClient.h b/VisClient.h
+index b53faea..84a0cd6 100644
+--- a/VisClient.h
++++ b/VisClient.h
+@@ -15,6 +15,7 @@
+ #include <mutex>
+ #include <string>
+ #include <thread>
++#include <limits>
+ 
+ #undef TRY_AGAIN
+ 
+@@ -51,8 +52,8 @@ struct WMessageResult {
+     WMessageResult(Status s, size_t id) : status(s), subscriptionId(id) {}
+     WMessageResult(Status s, size_t id, CommandResult c)
+         : status(s), subscriptionId(id), commandResult(c) {}
+-    Status status;
+-    size_t subscriptionId;
++    Status status = Status::UNKNOWN_ERROR;
++    size_t subscriptionId = std::numeric_limits< size_t >::max( );
+     CommandResult commandResult;
+ };
+ 

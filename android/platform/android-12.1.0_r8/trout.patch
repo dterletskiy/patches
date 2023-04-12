@@ -1,4 +1,19 @@
 
+project device/common/
+diff --git a/populate-new-device.sh b/populate-new-device.sh
+index db5da3d..a99f253 100755
+--- a/populate-new-device.sh
++++ b/populate-new-device.sh
+@@ -95,6 +95,8 @@ else
+ LOCAL_KERNEL := \$(TARGET_PREBUILT_KERNEL)
+ endif
+ 
++echo @TDA: LOCAL_KERNEL = \${LOCAL_KERNEL}
++
+ PRODUCT_COPY_FILES := \\
+ 	\$(LOCAL_KERNEL):kernel
+ 
+
 project device/generic/car/
 diff --git a/emulator/audio/driver/audio_hw.c b/emulator/audio/driver/audio_hw.c
 index 65cbb11..06b0fe8 100644
@@ -40,32 +55,35 @@ index 94ef593cd..011e45275 100644
 
 project device/google/trout/
 diff --git a/aosp_trout_arm64.mk b/aosp_trout_arm64.mk
-index 641aea9..a57b3e9 100644
+index 641aea9..8f5e011 100644
 --- a/aosp_trout_arm64.mk
 +++ b/aosp_trout_arm64.mk
-@@ -56,10 +56,12 @@ LOCAL_TRACING_SERVER_PROPERTIES ?= \
+@@ -14,6 +14,82 @@
+ # limitations under the License.
+ #
  
- include device/google/trout/aosp_trout_common.mk
- 
--DEVICE_MANIFEST_FILE += device/google/trout/manifest.xml
-+DEVICE_MANIFEST_FILE += device/google/trout/manifest_x86.xml
-+DEVICE_MATRIX_FILE += device/google/trout/compatibility_matrix.xml
-+DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := device/google/trout/framework_compatibility_matrix.xml
- 
--PRODUCT_PROPERTY_OVERRIDES += \
--	vendor.ser.bt-uart?= \
-+# PRODUCT_PROPERTY_OVERRIDES += \
-+# 	vendor.ser.bt-uart?= \
- 
- PRODUCT_PACKAGES += \
- 	vport_trigger \
-@@ -90,3 +92,25 @@ PRODUCT_COPY_FILES += $(SENSOR_HAL_CONFIG_COPY_FILE)
- PRODUCT_NAME := aosp_trout_arm64
- PRODUCT_DEVICE := trout_arm64
- PRODUCT_MODEL := arm64 trout
 +
 +
++# TARGET_PREBUILT_KERNEL - environment variable which could contain path to the prebuilt kernel.
++ifneq ($(TARGET_PREBUILT_KERNEL),)
++   # Set TARGET_KERNEL_PATH variable which defines which kernel will be used in trout device.
++   TARGET_KERNEL_PATH := $(TARGET_PREBUILT_KERNEL)
 +
++   # Flag to supress errors in case of usage of the new kernel
++   # which is not mentioned in original configs and compatibility matrices.
++   PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
++   TARGET_KERNEL_USE := 6.1
++endif
++
++# TARGET_PREBUILT_MODULES_DIR - environment variable which could contain path to the prebuilt kernel modules.
++ifneq ($(TARGET_PREBUILT_MODULES_DIR),)
++   # Set BOARD_VENDOR_RAMDISK_KERNEL_MODULES variable which defines which kernel modules will be used in trout device.
++   # BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(wildcard $(TARGET_PREBUILT_MODULES_DIR)/*.ko)
++   BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(filter-out $(TARGET_PREBUILT_MODULES_DIR),$(shell find $(TARGET_PREBUILT_MODULES_DIR) -type f -name *.ko))
++
++   # Flag to disable stripping kernel modules during AOSP build.
++   BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES := true
++endif
 +
 +BOARD_KERNEL_CMDLINE += \
 +   androidboot.qemu=1 \
@@ -81,10 +99,64 @@ index 641aea9..a57b3e9 100644
 +   androidboot.vendor.vehiclehal.server.port=9300 \
 +   androidboot.vendor.vehiclehal.server.psf=/data/data/power.file \
 +   androidboot.vendor.vehiclehal.server.pss=/data/data/power.socket \
-+   androidboot.boot_devices=4010000000.pcie
++   androidboot.boot_devices=4010000000.pcie \
++   loglevel=1 \
++   console=ttyAMA0
 +
-+# KERNEL_VENDOR_CMDLINE += KERNEL_VENDOR_CMDLINE
-+# INTERNAL_KERNEL_CMDLINE += INTERNAL_KERNEL_CMDLINE
++
++
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := 
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_blk.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio-gpu.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_dma_buf.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_net.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/net_failover.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/failover.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci_legacy_dev.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci_modern_dev.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio-rng.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_snd.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_mmio.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pmem.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/nd_virtio.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_input.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_balloon.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_console.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/vmw_vsock_virtio_transport.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virt_wifi.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/cfg80211.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/rfkill.ko
++# BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(strip $(shell cat $(TARGET_PREBUILT_MODULES_DIR)/modules.load))
++
++
++
++
++
++
++
++
++
++
+ TARGET_USES_CF_RILD ?= false
+ 
+ $(call inherit-product, device/google/cuttlefish/vsoc_arm64/auto/aosp_cf.mk)
+@@ -56,10 +132,12 @@ LOCAL_TRACING_SERVER_PROPERTIES ?= \
+ 
+ include device/google/trout/aosp_trout_common.mk
+ 
+-DEVICE_MANIFEST_FILE += device/google/trout/manifest.xml
++DEVICE_MANIFEST_FILE += device/google/trout/manifest_x86.xml
++DEVICE_MATRIX_FILE += device/google/trout/compatibility_matrix.xml
++DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE := device/google/trout/framework_compatibility_matrix.xml
+ 
+-PRODUCT_PROPERTY_OVERRIDES += \
+-	vendor.ser.bt-uart?= \
++# PRODUCT_PROPERTY_OVERRIDES += \
++# 	vendor.ser.bt-uart?= \
+ 
+ PRODUCT_PACKAGES += \
+ 	vport_trigger \
 diff --git a/aosp_trout_common.mk b/aosp_trout_common.mk
 index c5d9850..e532b7a 100644
 --- a/aosp_trout_common.mk
@@ -149,14 +221,13 @@ index f5b070f..629e06d 100644
  # TODO(tutankhamen): Not sure we need both appdomain and untrusted_app
  allow { appdomain -isolated_app } gpu_device:chr_file rw_file_perms;
 diff --git a/trout_arm64/BoardConfig.mk b/trout_arm64/BoardConfig.mk
-index b120c2e..91fe9b9 100644
+index b120c2e..b1ddd1c 100644
 --- a/trout_arm64/BoardConfig.mk
 +++ b/trout_arm64/BoardConfig.mk
-@@ -29,3 +29,93 @@ BOARD_BOOT_HEADER_VERSION := 3
+@@ -29,3 +29,69 @@ BOARD_BOOT_HEADER_VERSION := 3
  # Android Bluetooth stack configuration
  LOCAL_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR ?= device/google/trout/product_files/bluetooth
  BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR := $(LOCAL_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR)
-+
 +
 +
 +
@@ -172,42 +243,6 @@ index b120c2e..91fe9b9 100644
 +
 +
 +
-+
-+
-+
-+
-+# BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES := true
-+
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(wildcard $(TARGET_PREBUILT_MODULES_DIR)/*.ko)
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(filter-out $(TARGET_PREBUILT_MODULES_DIR),$(shell find $(TARGET_PREBUILT_MODULES_DIR) -type f -name *.ko))
-+
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES := 
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_blk.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio-gpu.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_dma_buf.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_net.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/net_failover.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/failover.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci_legacy_dev.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pci_modern_dev.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio-rng.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_snd.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_mmio.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_pmem.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/nd_virtio.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_input.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_balloon.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virtio_console.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/vmw_vsock_virtio_transport.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/virt_wifi.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/cfg80211.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(TARGET_PREBUILT_MODULES_DIR)/rfkill.ko
-+# BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(strip $(shell cat $(TARGET_PREBUILT_MODULES_DIR)/modules.load))
-+
-+
-+
-+
 +$(warning @TDA: ---------------------------------- DEBUG BEGIN ----------------------------------)
 +
 +$(call print-var,PRODUCT_NAME)
@@ -217,6 +252,19 @@ index b120c2e..91fe9b9 100644
 +$(call print-var,TARGET_DEVICE_DIR)
 +$(call print-var,OUT_DIR)
 +$(warning PRODUCT_DIR: $(OUT_DIR)/target/product/$(PRODUCT_DEVICE))
++
++$(call print-var,PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS)
++$(call print-var,TARGET_KERNEL_USE)
++$(call print-var,TARGET_KERNEL_PATH)
++$(call print-var,LOCAL_KERNEL)
++$(call print-var,TARGET_PREBUILT_KERNEL)
++$(call print-var,BOARD_KERNEL_CMDLINE)
++
++$(call print-var,MKBOOTIMG)
++$(call print-var,BOARD_MKBOOTIMG_ARGS)
++
++# https://source.android.com/docs/setup/create/new-device
++$(call print-var,PRODUCT_COPY_FILES)
 +
 +# Modules for vendor image
 +# https://source.android.com/docs/core/architecture/kernel/loadable-kernel-modules#android-build-system-support
@@ -229,8 +277,6 @@ index b120c2e..91fe9b9 100644
 +
 +# https://source.android.com/docs/core/architecture/kernel/boot-time-opt#strip-debug-symbols
 +$(call print-var,BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES)
-+
-+$(warning @TDA: ----------------------------------  DEBUG END  ----------------------------------)
 +
 +
 +
@@ -246,6 +292,8 @@ index b120c2e..91fe9b9 100644
 +# $(call print-var,PRODUCT_PACKAGES)
 +# $(call print-var,PRODUCT_OUT)
 +# $(call print-var,TARGET_OUT)
++
++$(warning @TDA: ----------------------------------  DEBUG END  ----------------------------------)
 
 project frameworks/av/
 diff --git a/media/utils/include/mediautils/TimeCheck.h b/media/utils/include/mediautils/TimeCheck.h
