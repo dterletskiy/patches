@@ -1,0 +1,95 @@
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index cca003f..de21d14 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -3,7 +3,7 @@
+     "aasig_dev_platform_location": "aasig_dev_platform/build",
+     "aosp_scenarios_xml_file": "devices/scenarios_trout.xml",
+     "cuttlefish_xml_file": "cuttlefish/cuttlefish.xml",
+-    "paf_logs_location": "~/paf_logs",
++    "paf_logs_location": "~/.paf/logs",
+     "local_vendor_source_path": "/home/vladyslav_goncharuk/Projects/epam/aosp-vhal",
+     "local_vendor_destination_path": "device/epam/aosp-vhal"
+ }
+\ No newline at end of file
+diff --git a/aasig_dev_platform/build/build_android/general_settings.xml b/aasig_dev_platform/build/build_android/general_settings.xml
+index 1413e57..153f1aa 100644
+--- a/aasig_dev_platform/build/build_android/general_settings.xml
++++ b/aasig_dev_platform/build/build_android/general_settings.xml
+@@ -4,7 +4,7 @@
+     <!--ROOT LEVEL DIRECTORIES-->
+     <!--======================-->
+ 
+-    <param name="ROOT" value="/mnt"/>
++    <param name="ROOT" value="/mnt/dev"/>
+     <param name="ANDROID_DEPLOYMENT_DIR" value="android"/>
+ 
+     <!--=======================-->
+diff --git a/aasig_dev_platform/build/moulin/moulin.xml b/aasig_dev_platform/build/moulin/moulin.xml
+index 14f7cdd..7f2d62c 100644
+--- a/aasig_dev_platform/build/moulin/moulin.xml
++++ b/aasig_dev_platform/build/moulin/moulin.xml
+@@ -8,8 +8,8 @@
+     <!--ROOT LEVEL DIRECTORIES-->
+     <!--======================-->
+ 
+-    <param name="MOULIN_ROOT" value="/mnt"/>
+-    <param name="MOULIN_DEPLOYMENT_DIR" value="moulin"/>
++    <param name="MOULIN_ROOT" value="/mnt/dev/EPAM"/>
++    <param name="MOULIN_DEPLOYMENT_DIR" value="renesas"/>
+ 
+     <!--=======================-->
+     <!--PROJECT SUB-DIRECTORIES-->
+@@ -31,8 +31,8 @@
+ 
+     <!-- QEMU virtio DomD + DomU -->
+ 
+-    <!-- <param name="MOULIN_BUILD_CONFIGURATION_FILE_NAME" value="prod-devel-rcar"/> -->
+-    <!-- <param name="MOULIN_ADDITIONAL_PARAMETERS" value="&#45;&#45;ENABLE_DOMU yes &#45;&#45;ENABLE_MM yes"/> -->
++    <param name="MOULIN_BUILD_CONFIGURATION_FILE_NAME" value="prod-devel-rcar"/>
++    <param name="MOULIN_ADDITIONAL_PARAMETERS" value="&#45;&#45;ENABLE_DOMU yes &#45;&#45;ENABLE_MM yes"/>
+ 
+     <!-- Renesas BSP 5.1.0 -->
+     <!-- <param name="MOULIN_PRODUCT_GIT_URL" value="git@gipthub.com:svlad-90/meta-xt-prod-devel-rcar.git"/> -->
+@@ -44,8 +44,8 @@
+     <!-- <param name="MOULIN_PRODUCT_GIT_URL" value="git@github.com:otyshchenko1/meta-xt-prod-devel-rcar.git"/> -->
+     <!-- <param name="MOULIN_PRODUCT_GIT_BRANCH" value="my_devel_kirkstone"/> -->
+     <!-- Renesas BSP 5.9.0 + kirkstone Yocto + QEMU 7.2 -->
+-    <!-- <param name="MOULIN_PRODUCT_GIT_URL" value="git@github.com:otyshchenko1/meta-xt-prod-devel-rcar.git"/> -->
+-    <!-- <param name="MOULIN_PRODUCT_GIT_BRANCH" value="my_devel_virtio"/> -->
++    <param name="MOULIN_PRODUCT_GIT_URL" value="git@github.com:otyshchenko1/meta-xt-prod-devel-rcar.git"/>
++    <param name="MOULIN_PRODUCT_GIT_BRANCH" value="my_devel_virtio"/>
+ 
+     <!-- Cockpit rcar demo -->
+ 
+@@ -56,13 +56,13 @@
+ 
+     <!-- QEMU virtio DomD + DomA -->
+ 
+-    <param name="MOULIN_BUILD_CONFIGURATION_FILE_NAME" value="prod-devel-rcar"/>
+-    <param name="MOULIN_ADDITIONAL_PARAMETERS" value="&#45;&#45;ENABLE_ANDROID yes &#45;&#45;ENABLE_MM yes"/>
++    <!-- <param name="MOULIN_BUILD_CONFIGURATION_FILE_NAME" value="prod-devel-rcar"/>
++    <param name="MOULIN_ADDITIONAL_PARAMETERS" value="&#45;&#45;ENABLE_ANDROID yes &#45;&#45;ENABLE_MM yes"/> -->
+ 
+     <!-- Renesas BSP 5.1.0 -->
+ 
+-    <param name="MOULIN_PRODUCT_GIT_URL" value="git@github.com:dterletskiy/meta-xt-prod-devel-rcar.git"/>
+-    <param name="MOULIN_PRODUCT_GIT_BRANCH" value="xenvm-trout-dev"/>
++    <!-- <param name="MOULIN_PRODUCT_GIT_URL" value="git@github.com:dterletskiy/meta-xt-prod-devel-rcar.git"/>
++    <param name="MOULIN_PRODUCT_GIT_BRANCH" value="xenvm-trout-dev"/> -->
+ 
+     <!--=========================-->
+     <!--INSTALL DOCKER PARAMETERS-->
+diff --git a/aasig_dev_platform/build/xen_qemu_virtio_development/xen_qemu_virtio_development.xml b/aasig_dev_platform/build/xen_qemu_virtio_development/xen_qemu_virtio_development.xml
+index 2437ee0..a18daef 100644
+--- a/aasig_dev_platform/build/xen_qemu_virtio_development/xen_qemu_virtio_development.xml
++++ b/aasig_dev_platform/build/xen_qemu_virtio_development/xen_qemu_virtio_development.xml
+@@ -4,7 +4,7 @@
+     <!--ROOT LEVEL DIRECTORIES-->
+     <!--======================-->
+ 
+-    <param name="ROOT" value="/mnt"/>
++    <param name="ROOT" value="/mnt/dev/EPAM"/>
+     <param name="XQVD_DEPLOYMENT_DIR" value="xen_qemu_virtio_development"/>
+ 
+     <!--=======================-->
