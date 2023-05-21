@@ -1,0 +1,542 @@
+
+project common/
+diff --git a/android/abi_gki_protected_exports b/android/abi_gki_protected_exports
+index 0cfdef386..d8393d059 100644
+--- a/android/abi_gki_protected_exports
++++ b/android/abi_gki_protected_exports
+@@ -535,4 +535,4 @@ wpan_phy_for_each
+ wpan_phy_free
+ wpan_phy_new
+ wpan_phy_register
+-wpan_phy_unregister
+\ No newline at end of file
++wpan_phy_unregister
+diff --git a/drivers/vhost/vsock.c b/drivers/vhost/vsock.c
+index a2b374372..a71406474 100644
+--- a/drivers/vhost/vsock.c
++++ b/drivers/vhost/vsock.c
+@@ -6,6 +6,7 @@
+  * Author: Asias He <asias@redhat.com>
+  *         Stefan Hajnoczi <stefanha@redhat.com>
+  */
++#include <linux/tracing.h>
+ #include <linux/miscdevice.h>
+ #include <linux/atomic.h>
+ #include <linux/module.h>
+@@ -955,6 +956,8 @@ static int __init vhost_vsock_init(void)
+ {
+ 	int ret;
+ 
++	KERNEL_NOTICE( "transport: %px", &vhost_transport.transport );
++
+ 	ret = vsock_core_register(&vhost_transport.transport,
+ 				  VSOCK_TRANSPORT_F_H2G);
+ 	if (ret < 0)
+diff --git a/include/linux/tracing.h b/include/linux/tracing.h
+new file mode 100644
+index 000000000..493f37f7d
+--- /dev/null
++++ b/include/linux/tracing.h
+@@ -0,0 +1,25 @@
++#include <linux/kernel.h>
++
++
++
++#define MODULE_NAME "TDA"
++
++#define NEW_LINE "\n"
++
++#define KERNEL_MESSAGE( LOG_LEVEL, USER_FORMAT, ... ) \
++   printk( LOG_LEVEL "[%s:%s:%d / %s:%i] -> " USER_FORMAT "\n", \
++      "TDA", __FUNCTION__, __LINE__, \
++      current->comm, current->pid, \
++      ##__VA_ARGS__ \
++   )
++
++#define KERNEL_EMERG( USER_FORMAT, ... )           KERNEL_MESSAGE( KERN_EMERG,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_ALERT( USER_FORMAT, ... )           KERNEL_MESSAGE( KERN_ALERT,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_CRIT( USER_FORMAT, ... )            KERNEL_MESSAGE( KERN_CRIT,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_ERR( USER_FORMAT, ... )             KERNEL_MESSAGE( KERN_ERR,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_WARNING( USER_FORMAT, ... )         KERNEL_MESSAGE( KERN_WARNING,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_NOTICE( USER_FORMAT, ... )          KERNEL_MESSAGE( KERN_NOTICE,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_INFO( USER_FORMAT, ... )            KERNEL_MESSAGE( KERN_INFO,   USER_FORMAT, ##__VA_ARGS__ )
++#define KERNEL_DEBUG( USER_FORMAT, ... )           KERNEL_MESSAGE( KERN_DEBUG,   USER_FORMAT, ##__VA_ARGS__ )
++
++#undef MODULE_NAME
+diff --git a/net/socket.c b/net/socket.c
+index 577079a89..994fad774 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -52,6 +52,7 @@
+  *	Based upon Swansea University Computer Society NET3.039
+  */
+ 
++#include <linux/tracing.h>
+ #include <linux/bpf-cgroup.h>
+ #include <linux/ethtool.h>
+ #include <linux/mm.h>
+@@ -112,6 +113,8 @@ unsigned int sysctl_net_busy_read __read_mostly;
+ unsigned int sysctl_net_busy_poll __read_mostly;
+ #endif
+ 
++// static u32 sockets_count = 0;
++
+ static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to);
+ static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from);
+ static int sock_mmap(struct file *file, struct vm_area_struct *vma);
+@@ -1453,6 +1456,8 @@ int __sock_create(struct net *net, int family, int type, int protocol,
+ 	struct socket *sock;
+ 	const struct net_proto_family *pf;
+ 
++	// KERNEL_NOTICE( "sockets_count: %u", ++sockets_count );
++
+ 	/*
+ 	 *      Check protocol is in range
+ 	 */
+@@ -1765,7 +1770,10 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
+ 	struct sockaddr_storage address;
+ 	int err, fput_needed;
+ 
++	// KERNEL_NOTICE( "fd: %d", fd );
++
+ 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
++	// KERNEL_NOTICE( "sock: %px", sock );
+ 	if (sock) {
+ 		err = move_addr_to_kernel(umyaddr, addrlen, &address);
+ 		if (!err) {
+@@ -1773,9 +1781,12 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
+ 						   (struct sockaddr *)&address,
+ 						   addrlen);
+ 			if (!err)
++			{
+ 				err = sock->ops->bind(sock,
+ 						      (struct sockaddr *)
+ 						      &address, addrlen);
++				// KERNEL_NOTICE( "err: %d", err );
++			}
+ 		}
+ 		fput_light(sock->file, fput_needed);
+ 	}
+@@ -1962,7 +1973,9 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
+ 	struct socket *sock;
+ 	int err;
+ 
++	// KERNEL_NOTICE( "file: %px", file );
+ 	sock = sock_from_file(file);
++	// KERNEL_NOTICE( "sock: %px", sock );
+ 	if (!sock) {
+ 		err = -ENOTSOCK;
+ 		goto out;
+@@ -1976,6 +1989,7 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
+ 	err = sock->ops->connect(sock, (struct sockaddr *)address, addrlen,
+ 				 sock->file->f_flags | file_flags);
+ out:
++	// KERNEL_NOTICE( "err: %d", err );
+ 	return err;
+ }
+ 
+@@ -1984,6 +1998,7 @@ int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
+ 	int ret = -EBADF;
+ 	struct fd f;
+ 
++	// KERNEL_NOTICE( "fd: %d", fd );
+ 	f = fdget(fd);
+ 	if (f.file) {
+ 		struct sockaddr_storage address;
+diff --git a/net/vmw_vsock/af_vsock.c b/net/vmw_vsock/af_vsock.c
+index 884eca7f6..5b55a40af 100644
+--- a/net/vmw_vsock/af_vsock.c
++++ b/net/vmw_vsock/af_vsock.c
+@@ -85,6 +85,7 @@
+  *   TCP_LISTEN - listening
+  */
+ 
++#include <linux/tracing.h>
+ #include <linux/compat.h>
+ #include <linux/types.h>
+ #include <linux/bitops.h>
+@@ -1318,6 +1319,9 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 	long timeout;
+ 	DEFINE_WAIT(wait);
+ 
++	KERNEL_NOTICE( "sock: %px", sock );
++	KERNEL_NOTICE( "sock->state: %d", sock->state );
++
+ 	err = 0;
+ 	sk = sock->sk;
+ 	vsk = vsock_sk(sk);
+@@ -1355,6 +1359,7 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 		       sizeof(vsk->remote_addr));
+ 
+ 		err = vsock_assign_transport(vsk, NULL);
++		KERNEL_NOTICE( "err: %d", err );	
+ 		if (err)
+ 			goto out;
+ 
+@@ -1371,12 +1376,14 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 		}
+ 
+ 		err = vsock_auto_bind(vsk);
++		KERNEL_NOTICE( "err: %d", err );
+ 		if (err)
+ 			goto out;
+ 
+ 		sk->sk_state = TCP_SYN_SENT;
+ 
+ 		err = transport->connect(vsk);
++		KERNEL_NOTICE( "err: %d", err );
+ 		if (err < 0)
+ 			goto out;
+ 
+@@ -1392,6 +1399,7 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 	 * completed or a notification of an error.
+ 	 */
+ 	timeout = vsk->connect_timeout;
++	KERNEL_NOTICE( "timeout: %ld", timeout );
+ 	prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
+ 
+ 	while (sk->sk_state != TCP_ESTABLISHED && sk->sk_err == 0) {
+@@ -1419,9 +1427,11 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 		release_sock(sk);
+ 		timeout = schedule_timeout(timeout);
+ 		lock_sock(sk);
++		KERNEL_NOTICE( "timeout: %ld", timeout );
+ 
+ 		if (signal_pending(current)) {
+ 			err = sock_intr_errno(timeout);
++			KERNEL_NOTICE( "err: %d", err );
+ 			sk->sk_state = sk->sk_state == TCP_ESTABLISHED ? TCP_CLOSING : TCP_CLOSE;
+ 			sock->state = SS_UNCONNECTED;
+ 			vsock_transport_cancel_pkt(vsk);
+@@ -1429,6 +1439,7 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 			goto out_wait;
+ 		} else if (timeout == 0) {
+ 			err = -ETIMEDOUT;
++			KERNEL_NOTICE( "err: %d", err );
+ 			sk->sk_state = TCP_CLOSE;
+ 			sock->state = SS_UNCONNECTED;
+ 			vsock_transport_cancel_pkt(vsk);
+@@ -1440,15 +1451,19 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
+ 
+ 	if (sk->sk_err) {
+ 		err = -sk->sk_err;
++		KERNEL_NOTICE( "err: %d", err );
+ 		sk->sk_state = TCP_CLOSE;
+ 		sock->state = SS_UNCONNECTED;
+ 	} else {
+ 		err = 0;
++		KERNEL_NOTICE( "err: %d", err );
+ 	}
+ 
+ out_wait:
++	KERNEL_NOTICE( "err: %d", err );
+ 	finish_wait(sk_sleep(sk), &wait);
+ out:
++	KERNEL_NOTICE( "err: %d", err );
+ 	release_sock(sk);
+ 	return err;
+ }
+@@ -2325,6 +2340,8 @@ static int __init vsock_init(void)
+ {
+ 	int err = 0;
+ 
++	KERNEL_NOTICE( );
++
+ 	vsock_init_tables();
+ 
+ 	vsock_proto.owner = THIS_MODULE;
+@@ -2374,10 +2391,15 @@ EXPORT_SYMBOL_GPL(vsock_core_get_transport);
+ int vsock_core_register(const struct vsock_transport *t, int features)
+ {
+ 	const struct vsock_transport *t_h2g, *t_g2h, *t_dgram, *t_local;
+-	int err = mutex_lock_interruptible(&vsock_register_mutex);
++	int err;
++	KERNEL_NOTICE( "transport: %px", t );
++	err = mutex_lock_interruptible(&vsock_register_mutex);
+ 
+ 	if (err)
++	{
++		KERNEL_NOTICE( "error mutex" );
+ 		return err;
++	}
+ 
+ 	t_h2g = transport_h2g;
+ 	t_g2h = transport_g2h;
+@@ -2421,8 +2443,14 @@ int vsock_core_register(const struct vsock_transport *t, int features)
+ 	transport_dgram = t_dgram;
+ 	transport_local = t_local;
+ 
++	KERNEL_NOTICE( "transport_h2g: %px", transport_h2g );
++	KERNEL_NOTICE( "transport_g2h: %px", transport_g2h );
++	KERNEL_NOTICE( "transport_dgram: %px", transport_dgram );
++	KERNEL_NOTICE( "transport_local: %px", transport_local );
++
+ err_busy:
+ 	mutex_unlock(&vsock_register_mutex);
++	KERNEL_NOTICE( "error %d: ", err );
+ 	return err;
+ }
+ EXPORT_SYMBOL_GPL(vsock_core_register);
+diff --git a/net/vmw_vsock/hyperv_transport.c b/net/vmw_vsock/hyperv_transport.c
+index 59c3e2697..daf401301 100644
+--- a/net/vmw_vsock/hyperv_transport.c
++++ b/net/vmw_vsock/hyperv_transport.c
+@@ -8,6 +8,7 @@
+  *
+  * Copyright (c) 2017, Microsoft Corporation.
+  */
++#include <linux/tracing.h>
+ #include <linux/module.h>
+ #include <linux/vmalloc.h>
+ #include <linux/hyperv.h>
+@@ -932,6 +933,7 @@ static int __init hvs_init(void)
+ 	if (ret != 0)
+ 		return ret;
+ 
++	KERNEL_NOTICE( "transport: %px", &hvs_transport );
+ 	ret = vsock_core_register(&hvs_transport, VSOCK_TRANSPORT_F_G2H);
+ 	if (ret) {
+ 		vmbus_driver_unregister(&hvs_drv);
+diff --git a/net/vmw_vsock/virtio_transport.c b/net/vmw_vsock/virtio_transport.c
+index ad64f4035..2ee23d024 100644
+--- a/net/vmw_vsock/virtio_transport.c
++++ b/net/vmw_vsock/virtio_transport.c
+@@ -9,6 +9,7 @@
+  * Some of the code is take from Gerd Hoffmann <kraxel@redhat.com>'s
+  * early virtio-vsock proof-of-concept bits.
+  */
++#include <linux/tracing.h>
+ #include <linux/spinlock.h>
+ #include <linux/module.h>
+ #include <linux/list.h>
+@@ -93,6 +94,8 @@ virtio_transport_send_pkt_work(struct work_struct *work)
+ 	bool added = false;
+ 	bool restart_rx = false;
+ 
++	KERNEL_NOTICE( "vsock: %px\n", vsock );
++
+ 	mutex_lock(&vsock->tx_lock);
+ 
+ 	if (!vsock->tx_run)
+@@ -159,6 +162,7 @@ virtio_transport_send_pkt_work(struct work_struct *work)
+ out:
+ 	mutex_unlock(&vsock->tx_lock);
+ 
++	KERNEL_NOTICE( "restart_rx: %d", restart_rx );
+ 	if (restart_rx)
+ 		queue_work(virtio_vsock_workqueue, &vsock->rx_work);
+ }
+@@ -168,18 +172,21 @@ virtio_transport_send_pkt(struct virtio_vsock_pkt *pkt)
+ {
+ 	struct virtio_vsock *vsock;
+ 	int len = pkt->len;
++	KERNEL_NOTICE( "len: %d", len );
+ 
+ 	rcu_read_lock();
+ 	vsock = rcu_dereference(the_virtio_vsock);
+ 	if (!vsock) {
+ 		virtio_transport_free_pkt(pkt);
+ 		len = -ENODEV;
++		KERNEL_NOTICE( "len: %d", len );
+ 		goto out_rcu;
+ 	}
+ 
+ 	if (le64_to_cpu(pkt->hdr.dst_cid) == vsock->guest_cid) {
+ 		virtio_transport_free_pkt(pkt);
+ 		len = -ENODEV;
++		KERNEL_NOTICE( "len: %d", len );
+ 		goto out_rcu;
+ 	}
+ 
+@@ -205,6 +212,8 @@ virtio_transport_cancel_pkt(struct vsock_sock *vsk)
+ 	int cnt = 0, ret;
+ 	LIST_HEAD(freeme);
+ 
++	KERNEL_NOTICE( "vsock: %px", vsock );
++
+ 	rcu_read_lock();
+ 	vsock = rcu_dereference(the_virtio_vsock);
+ 	if (!vsock) {
+@@ -519,6 +528,8 @@ static void virtio_transport_rx_work(struct work_struct *work)
+ 		container_of(work, struct virtio_vsock, rx_work);
+ 	struct virtqueue *vq;
+ 
++	KERNEL_NOTICE( "vsock: %px", vsock );
++
+ 	vq = vsock->vqs[VSOCK_VQ_RX];
+ 
+ 	mutex_lock(&vsock->rx_lock);
+@@ -664,6 +675,8 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
+ 	struct virtio_vsock *vsock = NULL;
+ 	int ret;
+ 
++	KERNEL_NOTICE( "vdev: %px", vdev );
++
+ 	ret = mutex_lock_interruptible(&the_virtio_vsock_mutex);
+ 	if (ret)
+ 		return ret;
+@@ -710,6 +723,8 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
+ 
+ 	mutex_unlock(&the_virtio_vsock_mutex);
+ 
++	KERNEL_NOTICE( "CID: %u", virtio_transport_get_local_cid( ) );
++
+ 	return 0;
+ 
+ out:
+@@ -817,6 +832,7 @@ static int __init virtio_vsock_init(void)
+ 	if (!virtio_vsock_workqueue)
+ 		return -ENOMEM;
+ 
++	KERNEL_NOTICE( "transport: %px", &virtio_transport.transport );
+ 	ret = vsock_core_register(&virtio_transport.transport,
+ 				  VSOCK_TRANSPORT_F_G2H);
+ 	if (ret)
+diff --git a/net/vmw_vsock/virtio_transport_common.c b/net/vmw_vsock/virtio_transport_common.c
+index b6ab3c030..70fc4c5e1 100644
+--- a/net/vmw_vsock/virtio_transport_common.c
++++ b/net/vmw_vsock/virtio_transport_common.c
+@@ -6,6 +6,7 @@
+  * Author: Asias He <asias@redhat.com>
+  *         Stefan Hajnoczi <stefanha@redhat.com>
+  */
++#include <linux/tracing.h>
+ #include <linux/spinlock.h>
+ #include <linux/module.h>
+ #include <linux/sched/signal.h>
+@@ -169,6 +170,8 @@ static struct sk_buff *virtio_transport_build_skb(void *opaque)
+ 
+ void virtio_transport_deliver_tap_pkt(struct virtio_vsock_pkt *pkt)
+ {
++	KERNEL_NOTICE( "pkt->tap_delivered: %d", pkt->tap_delivered );
++
+ 	if (pkt->tap_delivered)
+ 		return;
+ 
+@@ -199,6 +202,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
+ 	struct virtio_vsock_pkt *pkt;
+ 	u32 pkt_len = info->pkt_len;
+ 
++	KERNEL_NOTICE( "vsk: %px", vsk );
+ 	info->type = virtio_transport_get_type(sk_vsock(vsk));
+ 
+ 	t_ops = virtio_transport_get_ops(vsk);
+@@ -214,6 +218,10 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
+ 		dst_cid = info->remote_cid;
+ 		dst_port = info->remote_port;
+ 	}
++	KERNEL_NOTICE( "src_cid: %u", src_cid );
++	KERNEL_NOTICE( "src_port: %u", src_port );
++	KERNEL_NOTICE( "dst_cid: %u", dst_cid );
++	KERNEL_NOTICE( "dst_port: %u", dst_port );
+ 
+ 	vvs = vsk->trans;
+ 
+@@ -223,6 +231,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
+ 
+ 	/* virtio_transport_get_credit might return less than pkt_len credit */
+ 	pkt_len = virtio_transport_get_credit(vvs, pkt_len);
++	KERNEL_NOTICE( "pkt_len: %u", pkt_len );
+ 
+ 	/* Do not send zero length OP_RW pkt */
+ 	if (pkt_len == 0 && info->op == VIRTIO_VSOCK_OP_RW)
+@@ -231,6 +240,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
+ 	pkt = virtio_transport_alloc_pkt(info, pkt_len,
+ 					 src_cid, src_port,
+ 					 dst_cid, dst_port);
++	KERNEL_NOTICE( "pkt: %px", pkt );
+ 	if (!pkt) {
+ 		virtio_transport_put_credit(vvs, pkt_len);
+ 		return -ENOMEM;
+@@ -238,6 +248,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
+ 
+ 	virtio_transport_inc_tx_pkt(vvs, pkt);
+ 
++	KERNEL_NOTICE( );
+ 	return t_ops->send_pkt(pkt);
+ }
+ 
+@@ -756,6 +767,8 @@ int virtio_transport_connect(struct vsock_sock *vsk)
+ 		.vsk = vsk,
+ 	};
+ 
++	KERNEL_NOTICE( "vsk: %px", vsk );
++
+ 	return virtio_transport_send_pkt_info(vsk, &info);
+ }
+ EXPORT_SYMBOL_GPL(virtio_transport_connect);
+@@ -991,20 +1004,26 @@ virtio_transport_recv_connecting(struct sock *sk,
+ 	int err;
+ 	int skerr;
+ 
++	KERNEL_NOTICE( "sk: %px", sk );
++
+ 	switch (le16_to_cpu(pkt->hdr.op)) {
+ 	case VIRTIO_VSOCK_OP_RESPONSE:
++		KERNEL_NOTICE( "VIRTIO_VSOCK_OP_RESPONSE" );
+ 		sk->sk_state = TCP_ESTABLISHED;
+ 		sk->sk_socket->state = SS_CONNECTED;
+ 		vsock_insert_connected(vsk);
+ 		sk->sk_state_change(sk);
+ 		break;
+ 	case VIRTIO_VSOCK_OP_INVALID:
++		KERNEL_NOTICE( "VIRTIO_VSOCK_OP_INVALID" );
+ 		break;
+ 	case VIRTIO_VSOCK_OP_RST:
++		KERNEL_NOTICE( "VIRTIO_VSOCK_OP_RST" );
+ 		skerr = ECONNRESET;
+ 		err = 0;
+ 		goto destroy;
+ 	default:
++		KERNEL_NOTICE( "default" );
+ 		skerr = EPROTO;
+ 		err = -EINVAL;
+ 		goto destroy;
+@@ -1016,6 +1035,7 @@ virtio_transport_recv_connecting(struct sock *sk,
+ 	sk->sk_state = TCP_CLOSE;
+ 	sk->sk_err = skerr;
+ 	sk_error_report(sk);
++	KERNEL_NOTICE( "sk->sk_err: %d", sk->sk_err );
+ 	return err;
+ }
+ 
+diff --git a/net/vmw_vsock/vmci_transport.c b/net/vmw_vsock/vmci_transport.c
+index 36eb16a40..9bf4b50a2 100644
+--- a/net/vmw_vsock/vmci_transport.c
++++ b/net/vmw_vsock/vmci_transport.c
+@@ -5,6 +5,7 @@
+  * Copyright (C) 2007-2013 VMware, Inc. All rights reserved.
+  */
+ 
++#include <linux/tracing.h>
+ #include <linux/types.h>
+ #include <linux/bitops.h>
+ #include <linux/cred.h>
+@@ -2065,6 +2066,7 @@ static void vmci_vsock_transport_cb(bool is_host)
+ 	else
+ 		features = VSOCK_TRANSPORT_F_G2H;
+ 
++	KERNEL_NOTICE( "transport: %px", &vmci_transport );
+ 	vsock_core_register(&vmci_transport, features);
+ }
+ 
+diff --git a/net/vmw_vsock/vsock_loopback.c b/net/vmw_vsock/vsock_loopback.c
+index 169a8cf65..d3cf49ac6 100644
+--- a/net/vmw_vsock/vsock_loopback.c
++++ b/net/vmw_vsock/vsock_loopback.c
+@@ -7,6 +7,7 @@
+  *          Stefano Garzarella <sgarzare@redhat.com>
+  *
+  */
++#include <linux/tracing.h>
+ #include <linux/spinlock.h>
+ #include <linux/module.h>
+ #include <linux/list.h>
+@@ -151,6 +152,7 @@ static int __init vsock_loopback_init(void)
+ 	INIT_LIST_HEAD(&vsock->pkt_list);
+ 	INIT_WORK(&vsock->pkt_work, vsock_loopback_work);
+ 
++	KERNEL_NOTICE( "transport: %px", &loopback_transport.transport );
+ 	ret = vsock_core_register(&loopback_transport.transport,
+ 				  VSOCK_TRANSPORT_F_LOCAL);
+ 	if (ret)

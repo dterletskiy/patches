@@ -54,11 +54,21 @@ index 94ef593cd..011e45275 100644
      chmod 622 /dev/kmsg
 
 project device/google/trout/
+diff --git a/AndroidProducts.mk b/AndroidProducts.mk
+index a3b92b7..99e8c01 100644
+--- a/AndroidProducts.mk
++++ b/AndroidProducts.mk
+@@ -21,3 +21,5 @@ PRODUCT_MAKEFILES := \
+ COMMON_LUNCH_CHOICES := \
+ 	aosp_trout_arm64-userdebug \
+ 	aosp_trout_x86-userdebug \
++	aosp_trout_arm64-eng \
++	aosp_trout_x86-eng
 diff --git a/aosp_trout_arm64.mk b/aosp_trout_arm64.mk
-index 641aea9..8f5e011 100644
+index 641aea9..aad0e2f 100644
 --- a/aosp_trout_arm64.mk
 +++ b/aosp_trout_arm64.mk
-@@ -14,6 +14,82 @@
+@@ -14,6 +14,81 @@
  # limitations under the License.
  #
  
@@ -86,7 +96,6 @@ index 641aea9..8f5e011 100644
 +endif
 +
 +BOARD_KERNEL_CMDLINE += \
-+   androidboot.qemu=1 \
 +   androidboot.selinux=permissive \
 +   androidboot.fstab_suffix=trout \
 +   androidboot.hardware=cutf_cvm \
@@ -141,7 +150,7 @@ index 641aea9..8f5e011 100644
  TARGET_USES_CF_RILD ?= false
  
  $(call inherit-product, device/google/cuttlefish/vsoc_arm64/auto/aosp_cf.mk)
-@@ -56,10 +132,12 @@ LOCAL_TRACING_SERVER_PROPERTIES ?= \
+@@ -56,10 +131,12 @@ LOCAL_TRACING_SERVER_PROPERTIES ?= \
  
  include device/google/trout/aosp_trout_common.mk
  
@@ -158,16 +167,18 @@ index 641aea9..8f5e011 100644
  PRODUCT_PACKAGES += \
  	vport_trigger \
 diff --git a/aosp_trout_common.mk b/aosp_trout_common.mk
-index c5d9850..e532b7a 100644
+index c5d9850..103fa63 100644
 --- a/aosp_trout_common.mk
 +++ b/aosp_trout_common.mk
-@@ -63,7 +63,8 @@ LOCAL_DUMPSTATE_PROPERTIES ?= \
+@@ -63,7 +63,10 @@ LOCAL_DUMPSTATE_PROPERTIES ?= \
      ro.vendor.helpersystem.log_loc=/data/host_logs \
  
  # Vehicle HAL
 -LOCAL_VHAL_PRODUCT_PACKAGE ?= android.hardware.automotive.vehicle@2.0-virtualization-service
 +LOCAL_VHAL_PRODUCT_PACKAGE ?= android.hardware.automotive.vehicle@2.0-virtualization-service \
-+                                android.hardware.automotive.vehicle@2.0-virtualization-grpc-server
++                                android.hardware.automotive.vehicle@2.0-virtualization-grpc-server \
++                                android.hardware.automotive.vehicle@vsock-server \
++                                android.hardware.automotive.vehicle@vsock-client
  
  # EVS HAL
  LOCAL_EVS_PRODUCT_COPY_FILES ?= \
@@ -183,6 +194,29 @@ index 38db924..8c60243 100644
      srcs: [
          "VirtualizationGrpcServer.cpp",
      ],
+diff --git a/hal/vehicle/2.0/Utils.cpp b/hal/vehicle/2.0/Utils.cpp
+index 7d81b42..3988473 100644
+--- a/hal/vehicle/2.0/Utils.cpp
++++ b/hal/vehicle/2.0/Utils.cpp
+@@ -42,13 +42,16 @@ namespace impl {
+ 
+ #ifdef __BIONIC__
+ std::string VirtualizedVhalServerInfo::getServerUri() const {
+-    return vsock.str();
++    // return vsock.str();
++    std::stringstream ss;
++    ss << "dns:///localhost:1234";
++    return ss.str();
+ }
+ #else
+ std::string VirtualizedVhalServerInfo::getServerUri() const {
+     std::stringstream ss;
+ 
+-    ss << "vsock:" << vsock.cid << ":" << vsock.port;
++    ss << "dns:///localhost:1234";
+     return ss.str();
+ }
+ #endif
 diff --git a/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc b/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc
 index 1101b08..d9a9110 100644
 --- a/hal/vehicle/2.0/android.hardware.automotive.vehicle@2.0-virtualization-grpc-server.rc
@@ -221,10 +255,10 @@ index f5b070f..629e06d 100644
  # TODO(tutankhamen): Not sure we need both appdomain and untrusted_app
  allow { appdomain -isolated_app } gpu_device:chr_file rw_file_perms;
 diff --git a/trout_arm64/BoardConfig.mk b/trout_arm64/BoardConfig.mk
-index b120c2e..b1ddd1c 100644
+index b120c2e..f284595 100644
 --- a/trout_arm64/BoardConfig.mk
 +++ b/trout_arm64/BoardConfig.mk
-@@ -29,3 +29,69 @@ BOARD_BOOT_HEADER_VERSION := 3
+@@ -29,3 +29,72 @@ BOARD_BOOT_HEADER_VERSION := 3
  # Android Bluetooth stack configuration
  LOCAL_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR ?= device/google/trout/product_files/bluetooth
  BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR := $(LOCAL_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR)
@@ -245,6 +279,9 @@ index b120c2e..b1ddd1c 100644
 +
 +$(warning @TDA: ---------------------------------- DEBUG BEGIN ----------------------------------)
 +
++$(call print-var,TARGET_BUILD_TYPE)
++$(call print-var,TARGET_BUILD_VARIANT)
++$(call print-var,TARGET_PRODUCT)
 +$(call print-var,PRODUCT_NAME)
 +$(call print-var,PRODUCT_DEVICE)
 +$(call print-var,PRODUCT_MODEL)
@@ -264,19 +301,19 @@ index b120c2e..b1ddd1c 100644
 +$(call print-var,BOARD_MKBOOTIMG_ARGS)
 +
 +# https://source.android.com/docs/setup/create/new-device
-+$(call print-var,PRODUCT_COPY_FILES)
++# $(call print-var,PRODUCT_COPY_FILES)
 +
 +# Modules for vendor image
 +# https://source.android.com/docs/core/architecture/kernel/loadable-kernel-modules#android-build-system-support
 +# https://source.android.com/docs/core/architecture/kernel/kernel-module-support#full-android
-+$(call print-var,BOARD_VENDOR_KERNEL_MODULES)
++# $(call print-var,BOARD_VENDOR_KERNEL_MODULES)
 +
 +# Modules for vendor_boot image
 +# https://source.android.com/docs/core/architecture/kernel/kernel-module-support#first-stage-init
-+$(call print-var,BOARD_VENDOR_RAMDISK_KERNEL_MODULES)
++# $(call print-var,BOARD_VENDOR_RAMDISK_KERNEL_MODULES)
 +
 +# https://source.android.com/docs/core/architecture/kernel/boot-time-opt#strip-debug-symbols
-+$(call print-var,BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES)
++# $(call print-var,BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES)
 +
 +
 +
