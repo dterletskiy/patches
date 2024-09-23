@@ -1,0 +1,190 @@
+diff --git a/tda/boards-ep.yaml b/tda/boards-ep.yaml
+new file mode 100644
+index 0000000..a467f56
+--- /dev/null
++++ b/tda/boards-ep.yaml
+@@ -0,0 +1,40 @@
++---
++masters:
++  - name: master
++    host: testpc7
++    listen_address: 0.0.0.0
++    webinterface_port: 5080
++    allowed_hosts:
++      - "10.22.64.18"
++      - "127.0.0.1"
++    users:
++      - name: admin
++        token: longrandomtokenadmin
++        password: admin
++        superuser: true
++        staff: true
++    tokens:
++      - username: admin
++        token: dfjdfkfkdjfkdsjfsl
++        description: no description
++
++slaves:
++  - name: slave
++    host: testpc7
++    remote_master: master
++    remote_user: admin
++    # remote_rpc_port: 90
++    use_overlay_server: false
++    use_tftp: false
++    use_nbd: false
++
++boards:
++  - name: qemu-01
++    type: qemu
++    slave: slave
++  - name: qemu-02
++    type: qemu
++    slave: slave
++  - name: qemu-03
++    type: qemu
++    slave: slave
+diff --git a/tda/client.py b/tda/client.py
+new file mode 100755
+index 0000000..ed233d8
+--- /dev/null
++++ b/tda/client.py
+@@ -0,0 +1,74 @@
++#!/usr/bin/env python3
++
++import xmlrpc.client
++
++
++
++webinterface_address = "127.0.0.1"
++webinterface_address = "10.22.64.18"
++webinterface_port = "5080"
++
++username = "admin"
++password = "admin"
++token = "longrandomtokenadmin"
++
++
++
++server = xmlrpc.client.ServerProxy(
++      f"http://{username}:{token}@{webinterface_address}:{webinterface_port}/RPC2",
++      allow_none = True,
++   )
++
++# print( "------------------- system.listMethods -------------------" )
++print( server.system.listMethods( ) )
++# print( "----------------------------------------------------------" )
++
++# print( "--------------- scheduler.all_device_types ---------------" )
++# print( server.scheduler.all_device_types( ) )
++# print( "----------------------------------------------------------" )
++
++# print( "----------------- scheduler.all_devices ------------------" )
++# print( server.scheduler.all_devices( ) )
++# print( "----------------------------------------------------------" )
++
++# print( "-------------- scheduler.device_types.list ---------------" )
++# print( server.scheduler.device_types.list( ) )
++# print( "----------------------------------------------------------" )
++
++# print( "---------------- scheduler.workers.list ------------------" )
++# print( server.scheduler.workers.list( ) )
++# print( "----------------------------------------------------------" )
++
++# print( "---------------- scheduler.workers.show ------------------" )
++# print( server.scheduler.workers.show( "slave" ) )
++# print( "----------------------------------------------------------" )
++
++# print( "------------- scheduler.workers.get_config ---------------" )
++# print( server.scheduler.workers.get_config( "slave" ) )
++# print( "----------------------------------------------------------" )
++
++# print( server.scheduler.get_device_config( "qemu-01" ) )
++# print( server.scheduler.get_device_status( "qemu-01" ) )
++# print( server.scheduler.jobs.list( ) )
++
++
++
++# with open( f"job.yaml", "r" ) as file:
++#    content = file.read( )
++#    # print( content )
++#    job_id = server.scheduler.jobs.submit( content )
++#    print( server.scheduler.jobs.show( job_id ) )
++
++# print( server.scheduler.all_jobs( ) )
++# print( server.scheduler.jobs.show( 42 ) )
++# print( server.scheduler.cancel_job( 38 ) )
++
++
++# print( server.scheduler.workers.list( ) )
++# server.scheduler.workers.add( "new_slave" )
++# print( server.scheduler.workers.list( ) )
++# print( server.scheduler.workers.show( "new_slave" ) )
++# server.scheduler.workers.delete( "new_slave" )
++# print( server.scheduler.workers.list( ) )
++
++
+diff --git a/tda/job.yaml b/tda/job.yaml
+new file mode 100644
+index 0000000..0caa5bc
+--- /dev/null
++++ b/tda/job.yaml
+@@ -0,0 +1,58 @@
++# Your first LAVA JOB definition for an x86_64 QEMU
++device_type: qemu
++job_name: QEMU pipeline, first job
++
++# tags:
++# - tap_device
++# - virtual_io
++
++timeouts:
++  job:
++    minutes: 15
++  action:
++    minutes: 5
++priority: medium
++visibility: public
++
++# context allows specific values to be overridden or included
++context:
++  # tell the qemu template which architecture is being tested
++  # the template uses that to ensure that qemu-system-x86_64 is executed.
++  arch: amd64
++
++metadata:
++  # please change these fields when modifying this job for your own tests.
++  docs-source: first-job
++  docs-filename: qemu-pipeline-first-job.yaml
++
++actions:
++  - deploy:
++      timeout:
++        minutes: 5
++      to: tmpfs
++      images:
++          rootfs:
++            image_arg: -drive format=raw,file={rootfs}
++            url: https://images.validation.linaro.org/kvm/standard/stretch-2.img.gz
++            compression: gz
++  - boot:
++      timeout:
++        minutes: 2
++      method: qemu
++      media: tmpfs
++      prompts: ["root@debian:"]
++      auto_login:
++        login_prompt: "login:"
++        username: root
++  - test:
++      timeout:
++        minutes: 5
++      definitions:
++      - repository: http://git.linaro.org/lava-team/lava-functional-tests.git
++        from: git
++        path: lava-test-shell/smoke-tests-basic.yaml
++        name: smoke-tests
++      - repository: https://git.linaro.org/lava-team/lava-functional-tests.git
++        from: git
++        path: lava-test-shell/single-node/singlenode03.yaml
++        name: singlenode-advanced
