@@ -1,0 +1,66 @@
+diff --git a/xen/arch/arm/setup.c b/xen/arch/arm/setup.c
+index 0c2fdac..3c84415 100644
+--- a/xen/arch/arm/setup.c
++++ b/xen/arch/arm/setup.c
+@@ -718,6 +718,39 @@ void __init populate_boot_allocator(void)
+ 
+ size_t __read_mostly dcache_line_bytes;
+ 
++struct cpu_ticks
++{
++    uint64_t ticks;
++    uint32_t freq;
++};
++
++static inline void read_cpu_ticks(struct cpu_ticks *_cpu_ticks)
++{
++    asm volatile("mrs %0, cntvct_el0" : "=r" (_cpu_ticks->ticks));
++    asm volatile("mrs %0, cntfrq_el0" : "=r" (_cpu_ticks->freq));
++}
++
++uint64_t log_cpu_ticks(struct cpu_ticks *_cpu_ticks)
++{
++    uint64_t time_us = 0;
++
++    time_us = (_cpu_ticks->ticks * 1000000ULL) / _cpu_ticks->freq;
++
++    printk("@TDA: ticks=%lu / freq=%u / time=%lu us\n", _cpu_ticks->ticks, _cpu_ticks->freq, time_us);
++
++    return time_us;
++}
++
++void log_cpu_timing(struct cpu_ticks *start_cpu, struct cpu_ticks *stop_cpu)
++{
++    uint64_t start_time_us = 0;
++    uint64_t stop_time_us = 0;
++
++    start_time_us = log_cpu_ticks(start_cpu);
++    stop_time_us = log_cpu_ticks(stop_cpu);
++    printk("@TDA:  delta=%lu us\n", stop_time_us - start_time_us);
++}
++
+ /* C entry point for boot CPU */
+ void asmlinkage __init start_xen(unsigned long boot_phys_offset,
+                                  unsigned long fdt_paddr)
+@@ -728,6 +761,11 @@ void asmlinkage __init start_xen(unsigned long boot_phys_offset,
+     struct domain *d;
+     int rc, i;
+ 
++    struct cpu_ticks start_cpu;
++    struct cpu_ticks stop_cpu;
++
++    read_cpu_ticks(&start_cpu);
++
+     dcache_line_bytes = read_dcache_line_bytes();
+ 
+     percpu_init_areas();
+@@ -883,6 +921,9 @@ void asmlinkage __init start_xen(unsigned long boot_phys_offset,
+     enable_errata_workarounds();
+     enable_cpu_features();
+ 
++    read_cpu_ticks(&stop_cpu);
++    log_cpu_timing(&start_cpu, &stop_cpu);
++
+     /* Create initial domain 0. */
+     if ( !is_dom0less_mode() )
+         create_dom0();
