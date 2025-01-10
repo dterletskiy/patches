@@ -1,0 +1,14 @@
+diff --git a/xen/include/xen/lib.h b/xen/include/xen/lib.h
+index 394319c..44b7578 100644
+--- a/xen/include/xen/lib.h
++++ b/xen/include/xen/lib.h
+@@ -72,6 +72,9 @@ extern void printk(const char *fmt, ...)
+     }                                           \
+ })
+ 
++#define tda_printk( FORMAT, ... ) \
++    printk( "@TDA [%s:%s:%d] -> " FORMAT "\n", __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__ )
++
+ extern void guest_printk(const struct domain *d, const char *fmt, ...)
+     __attribute__ ((format (printf, 2, 3)));
+ extern void noreturn panic(const char *fmt, ...)
